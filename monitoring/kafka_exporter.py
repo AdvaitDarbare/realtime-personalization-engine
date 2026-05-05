@@ -21,7 +21,7 @@ import threading
 import logging
 from collections import defaultdict, Counter
 
-from kafka import KafkaConsumer
+from kafka import KafkaConsumer, TopicPartition
 from prometheus_client import start_http_server, Gauge, Counter as PromCounter
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -78,38 +78,93 @@ recommendations_total = Gauge(
 
 # ─── Kafka helpers ────────────────────────────────────────────────────────────
 
-def read_latest(topic: str, key_field: str) -> dict:
-    """Read all messages and return the latest value per key_field."""
+def read_latest(topic: str, key_field: str, lookback_per_partition: int = 20000) -> dict:
+    """Read a bounded recent window and return the latest value per key_field."""
     consumer = KafkaConsumer(
-        topic,
         bootstrap_servers=BOOTSTRAP,
         value_deserializer=lambda m: json.loads(m.decode("utf-8")) if m else None,
         key_deserializer=lambda m: m.decode("utf-8") if m else None,
-        auto_offset_reset="earliest",
         enable_auto_commit=False,
-        consumer_timeout_ms=5000,
+        consumer_timeout_ms=1000,
     )
+
     records = {}
-    for msg in consumer:
-        if msg.value and msg.value.get(key_field) is not None:
-            records[msg.value[key_field]] = msg.value
-    consumer.close()
+    try:
+        partitions = consumer.partitions_for_topic(topic)
+        if not partitions:
+            return records
+
+        topic_partitions = [TopicPartition(topic, partition) for partition in partitions]
+        consumer.assign(topic_partitions)
+        end_offsets = consumer.end_offsets(topic_partitions)
+
+        for topic_partition in topic_partitions:
+            end_offset = end_offsets.get(topic_partition, 0)
+            start_offset = max(0, end_offset - lookback_per_partition)
+            consumer.seek(topic_partition, start_offset)
+
+        remaining = set(topic_partitions)
+        deadline = time.time() + 3
+        while remaining and time.time() < deadline:
+            batches = consumer.poll(timeout_ms=200, max_records=1000)
+            if not batches:
+                break
+
+            for topic_partition, messages in batches.items():
+                for msg in messages:
+                    if msg.value and msg.value.get(key_field) is not None:
+                        records[msg.value[key_field]] = msg.value
+
+            for topic_partition in list(remaining):
+                if consumer.position(topic_partition) >= end_offsets.get(topic_partition, 0):
+                    remaining.remove(topic_partition)
+    finally:
+        consumer.close()
+
     return records
 
 
-def read_all(topic: str) -> list:
-    """Read all messages from a topic and return as a list (no dedup)."""
+def read_recent(topic: str, lookback_per_partition: int = 20000) -> list:
+    """Read a bounded recent window from a topic and return records without deduping."""
     consumer = KafkaConsumer(
-        topic,
         bootstrap_servers=BOOTSTRAP,
         value_deserializer=lambda m: json.loads(m.decode("utf-8")) if m else None,
         key_deserializer=lambda m: m.decode("utf-8") if m else None,
-        auto_offset_reset="earliest",
         enable_auto_commit=False,
-        consumer_timeout_ms=5000,
+        consumer_timeout_ms=1000,
     )
-    records = [msg.value for msg in consumer if msg.value]
-    consumer.close()
+
+    records = []
+    try:
+        partitions = consumer.partitions_for_topic(topic)
+        if not partitions:
+            return records
+
+        topic_partitions = [TopicPartition(topic, partition) for partition in partitions]
+        consumer.assign(topic_partitions)
+        end_offsets = consumer.end_offsets(topic_partitions)
+
+        for topic_partition in topic_partitions:
+            end_offset = end_offsets.get(topic_partition, 0)
+            start_offset = max(0, end_offset - lookback_per_partition)
+            consumer.seek(topic_partition, start_offset)
+
+        remaining = set(topic_partitions)
+        deadline = time.time() + 3
+        while remaining and time.time() < deadline:
+            batches = consumer.poll(timeout_ms=200, max_records=1000)
+            if not batches:
+                break
+
+            for topic_partition, messages in batches.items():
+                records.extend(msg.value for msg in messages if msg.value)
+
+            for topic_partition in list(remaining):
+                if consumer.position(topic_partition) >= end_offsets.get(topic_partition, 0):
+                    remaining.remove(topic_partition)
+    finally:
+        consumer.close()
+
     return records
 
 
@@ -171,7 +226,7 @@ def update_product_metrics():
 
 
 def update_recommendation_metrics():
-    records = read_all("recommendations")
+    records = read_recent("recommendations")
     if not records:
         log.warning("recommendations: no records found")
         return

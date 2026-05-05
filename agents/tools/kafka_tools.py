@@ -21,17 +21,31 @@
 
 
 import json
+import os
+import threading
 import time
 from kafka import KafkaConsumer, KafkaProducer, TopicPartition
 from crewai.tools import tool
 
 # PRODUCER (write recommendations back to Kafka)
 
-producer = KafkaProducer(
-    bootstrap_servers='localhost:9092',
-    value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-    key_serializer=lambda k: str(k).encode('utf-8')
-)
+BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+_producer = None
+_topic_cache = {}
+_cache_lock = threading.Lock()
+CACHE_TTL_SECONDS = 10
+
+
+def get_producer() -> KafkaProducer:
+    """Create the Kafka producer lazily so imports work before Kafka is running."""
+    global _producer
+    if _producer is None:
+        _producer = KafkaProducer(
+            bootstrap_servers=BOOTSTRAP_SERVERS,
+            value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+            key_serializer=lambda k: str(k).encode("utf-8"),
+        )
+    return _producer
 
 # HELPER FUNCTIONS
 
@@ -39,7 +53,7 @@ producer = KafkaProducer(
 def read_latest_from_topic(topic: str, key_field: str, lookback_per_partition: int = 20000) -> dict:
     """Read a bounded recent window from a topic and return latest per key."""
     consumer = KafkaConsumer(
-        bootstrap_servers='localhost:9092',
+        bootstrap_servers=BOOTSTRAP_SERVERS,
         value_deserializer=lambda m: json.loads(m.decode('utf-8')) if m else None,
         key_deserializer=lambda m: m.decode('utf-8') if m else None,
         enable_auto_commit=False,
@@ -87,6 +101,26 @@ def read_latest_from_topic(topic: str, key_field: str, lookback_per_partition: i
     return profiles
 
 
+def cached_latest_from_topic(topic: str, key_field: str, lookback_per_partition: int = 20000) -> dict:
+    """Cache short-lived topic snapshots so parallel tool calls reuse one Kafka scan."""
+    now = time.time()
+    cache_key = (topic, key_field, lookback_per_partition)
+    with _cache_lock:
+        cached = _topic_cache.get(cache_key)
+        if cached and now - cached["created_at"] < CACHE_TTL_SECONDS:
+            return cached["records"]
+
+    records = read_latest_from_topic(topic, key_field, lookback_per_partition)
+
+    with _cache_lock:
+        _topic_cache[cache_key] = {
+            "created_at": now,
+            "records": records,
+        }
+
+    return records
+
+
 # we write the recommendation back to the recommendations topic
 def write_recommendation(userid: int, recommendation: str, agent_type: str):
     """Write agent output back to Kafka recommendations topic."""
@@ -96,6 +130,7 @@ def write_recommendation(userid: int, recommendation: str, agent_type: str):
         "recommendation": recommendation,
         "timestamp": __import__('time').strftime('%Y-%m-%d %H:%M:%S')
     }
+    producer = get_producer()
     producer.send(
         topic='recommendations',
         key=userid,
@@ -110,7 +145,7 @@ def write_recommendation(userid: int, recommendation: str, agent_type: str):
 def get_user_profile(userid: int) -> str:
     """Get the live profile for a specific user including
     their page views, orders, price sensitivity and preferences."""
-    profiles = read_latest_from_topic('live-user-profile', 'userid')
+    profiles = cached_latest_from_topic('live-user-profile', 'userid')
     profile = profiles.get(userid)
     if profile:
         return json.dumps(profile)
@@ -121,7 +156,14 @@ def get_user_profile(userid: int) -> str:
 def get_product_profile(productid: str) -> str:
     """Get the live profile for a specific product including
     stock levels, demand score, pricing and sale status."""
-    profiles = read_latest_from_topic('live-product-profile', 'productid')
+    profiles = cached_latest_from_topic('live-product-profile', 'productid')
+    profile = profiles.get(productid)
+    if not profile:
+        profiles = cached_latest_from_topic(
+            'live-product-profile',
+            'productid',
+            lookback_per_partition=250000,
+        )
     profile = profiles.get(productid)
     if profile:
         return json.dumps(profile)
@@ -131,7 +173,7 @@ def get_product_profile(productid: str) -> str:
 @tool("Get All Active Users")
 def get_active_users() -> str:
     """Get latest profiles for all users who have placed orders."""
-    profiles = read_latest_from_topic('live-user-profile', 'userid')
+    profiles = cached_latest_from_topic('live-user-profile', 'userid')
     active = [p for p in profiles.values() if p.get('total_orders', 0) > 0]
     return json.dumps(active[:10])
 
@@ -140,7 +182,11 @@ def get_active_users() -> str:
 def get_all_products() -> str:
     """Get latest profiles for all products including
     stock levels, demand scores and sale status."""
-    profiles = read_latest_from_topic('live-product-profile', 'productid')
+    profiles = cached_latest_from_topic(
+        'live-product-profile',
+        'productid',
+        lookback_per_partition=250000,
+    )
     products = []
     for product in profiles.values():
         products.append({

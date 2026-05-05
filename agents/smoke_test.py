@@ -6,6 +6,7 @@ import urllib.request
 from pathlib import Path
 
 from kafka import KafkaConsumer, TopicPartition
+from kafka.errors import KafkaError
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -94,12 +95,16 @@ def kafka_topics_and_offsets():
 
 
 def read_recent_topic(topic, key_field, lookback_per_partition=20000):
-    consumer = KafkaConsumer(
-        bootstrap_servers="localhost:9092",
-        value_deserializer=lambda m: json.loads(m.decode("utf-8")) if m else None,
-        enable_auto_commit=False,
-        consumer_timeout_ms=1000,
-    )
+    try:
+        consumer = KafkaConsumer(
+            bootstrap_servers="localhost:9092",
+            value_deserializer=lambda m: json.loads(m.decode("utf-8")) if m else None,
+            enable_auto_commit=False,
+            consumer_timeout_ms=1000,
+        )
+    except KafkaError as exc:
+        check(f"Read {topic}", False, str(exc))
+        return {}
 
     latest = {}
     try:
