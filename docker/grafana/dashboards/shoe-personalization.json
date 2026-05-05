@@ -1,0 +1,294 @@
+{
+  "title": "Shoe Personalization — Live Business Metrics",
+  "uid": "shoe-personalization-v1",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "15s",
+  "time": { "from": "now-1h", "to": "now" },
+  "timezone": "browser",
+  "panels": [
+    {
+      "id": 1,
+      "type": "piechart",
+      "title": "User Price Sensitivity Distribution",
+      "description": "How many users fall into each price sensitivity tier (high = budget-conscious, low = premium spenders). Computed by Flink from avg order price.",
+      "gridPos": { "x": 0, "y": 0, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "pieType": "pie",
+        "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        {
+          "expr": "shoe_users_total",
+          "legendFormat": "{{price_sensitivity}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "barchart",
+      "title": "Active Interest Categories",
+      "description": "Number of users whose top active interest category is each category. Computed by Flink from clickstream events.",
+      "gridPos": { "x": 8, "y": 0, "w": 16, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "fillOpacity": 80 }
+        }
+      },
+      "options": {
+        "xField": "category",
+        "orientation": "auto",
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        {
+          "expr": "shoe_users_by_category",
+          "legendFormat": "{{category}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Low Stock Products",
+      "description": "Number of products where Flink has detected stock_trend = 'low' (fewer than 20 units). These need urgent promotion.",
+      "gridPos": { "x": 0, "y": 8, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 10 }
+            ]
+          },
+          "mappings": [],
+          "unit": "short"
+        }
+      },
+      "targets": [
+        {
+          "expr": "shoe_products_low_stock",
+          "legendFormat": "Low Stock",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Products On Sale",
+      "description": "Number of products currently flagged on_sale = true in the live product profile.",
+      "gridPos": { "x": 6, "y": 8, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null }
+            ]
+          },
+          "mappings": [],
+          "unit": "short"
+        }
+      },
+      "targets": [
+        {
+          "expr": "shoe_products_on_sale",
+          "legendFormat": "On Sale",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Total Recommendations",
+      "description": "Total recommendation events written to the recommendations Kafka topic by the personalization and merchandising agents.",
+      "gridPos": { "x": 12, "y": 8, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "purple", "value": null }
+            ]
+          },
+          "mappings": [],
+          "unit": "short"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(shoe_recommendations_total)",
+          "legendFormat": "Total",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Avg User Order Price",
+      "description": "Mean average order price across all users with live profiles. Indicates the overall spend level of the active user base.",
+      "gridPos": { "x": 18, "y": 8, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          },
+          "mappings": [],
+          "unit": "currencyUSD",
+          "decimals": 2
+        }
+      },
+      "targets": [
+        {
+          "expr": "shoe_avg_order_price",
+          "legendFormat": "Avg Order Price",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "barchart",
+      "title": "Product Demand Scores",
+      "description": "Live demand score per product (total orders / 100). Higher = more ordered. Products with high demand + low stock are urgent promotion candidates.",
+      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 10 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "fillOpacity": 80 }
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" },
+        "xField": "name"
+      },
+      "targets": [
+        {
+          "expr": "sort_desc(shoe_product_demand_score)",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "barchart",
+      "title": "Product Stock Levels",
+      "description": "Current stock units per product. Cross-reference with demand score to identify high-demand / low-stock urgency.",
+      "gridPos": { "x": 0, "y": 22, "w": 24, "h": 10 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "fillOpacity": 80 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 20 },
+              { "color": "green", "value": 50 }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        {
+          "expr": "shoe_product_stock",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "barchart",
+      "title": "Recommendations by Agent Type",
+      "description": "Count of recommendations written to Kafka per agent type (personalization vs merchandising).",
+      "gridPos": { "x": 0, "y": 32, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "fillOpacity": 80 }
+        }
+      },
+      "options": {
+        "orientation": "auto",
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        {
+          "expr": "shoe_recommendations_total",
+          "legendFormat": "{{agent_type}}",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "pluginId": "prometheus",
+        "label": "Data Source",
+        "hide": 0,
+        "refresh": 1,
+        "query": "prometheus"
+      }
+    ]
+  }
+}

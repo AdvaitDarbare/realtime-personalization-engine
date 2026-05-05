@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Virtual environments
+venv/
+venv_py39_backup/
+.venv/
+env/
+.env/
+
+# Environment variables
+.env
+*.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Logs
+*.log
+logs/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Docker
+.docker/
+
+# Kafka / Flink state
+__pycache__/
+*.class
+target/
+
+# Node
+node_modules/
