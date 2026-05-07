@@ -56,9 +56,20 @@ flowchart TB
     H --> I["live-user-profile topic"]
 ```
 
-The profile combines behavioral intent and purchase history.
+The profile combines recent behavioral intent and longer-lived purchase history.
 
-Page views measure browsing volume. Searches and cart adds measure stronger intent. Category counts infer what the user is currently interested in. Cart events infer order count, purchase count, return count, average order price, and price sensitivity.
+Recent page views measure browsing volume in the current intent window. Recent searches and cart adds measure stronger immediate intent. Category counts over the rolling window infer what the user is interested in right now. Cart events infer order count, purchase count, return count, average order price, and price sensitivity.
+
+The clickstream features use a 15-minute hopping window that advances every minute:
+
+| Feature | Meaning |
+| --- | --- |
+| `recent_page_views` | Product views in the current 15-minute window |
+| `recent_searches` | Searches in the current 15-minute window |
+| `recent_cart_adds` | Add-to-cart events in the current 15-minute window |
+| `active_interest_category` | Most frequent category in the current 15-minute window |
+| `active_interest_events` | Number of recent events behind that category |
+| `intent_window_minutes` | Window size used for the live intent fields |
 
 Price sensitivity is intentionally simple:
 
@@ -103,7 +114,7 @@ The ChromaDB tool builds an embedding for each product from name, description, a
 
 At recommendation time:
 
-1. The agent sees the user's active category and behavior.
+1. The agent sees the user's active category and recent behavior from the rolling intent window.
 2. It creates a query like "cushioned daily running shoe".
 3. ChromaDB returns the nearest products by semantic similarity.
 4. The agent checks live stock and price from Kafka/Flink before recommending.
@@ -141,10 +152,6 @@ Prometheus scrapes the exporter. Grafana queries Prometheus. This three-step flo
 3. Grafana visualizes those samples.
 
 ## Learning Exercises
-
-Add event-time processing to Flink using the `ts` field and watermarks.
-
-Change `active_interest_category` from all-time counts to a rolling one-hour window.
 
 Build deterministic recommendation ranking in Python before invoking the LLM.
 

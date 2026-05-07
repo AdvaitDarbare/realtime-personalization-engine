@@ -1,3 +1,7 @@
+-- Let event-time windows advance even when a source subtask has no assigned
+-- Kafka partitions or a quiet partition.
+SET 'table.exec.source.idle-timeout' = '5 s';
+
 -- ─── SOURCE TABLES ───
 
 CREATE TABLE clickstream (
@@ -9,7 +13,8 @@ CREATE TABLE clickstream (
     category VARCHAR,
     query VARCHAR,
     ts BIGINT,
-    event_time AS PROCTIME()
+    event_time AS TO_TIMESTAMP_LTZ(ts, 3),
+    WATERMARK FOR event_time AS event_time - INTERVAL '5' SECOND
 ) WITH (
     'connector' = 'kafka',
     'topic' = 'shoe-clickstream',
@@ -76,11 +81,12 @@ CREATE TABLE product_metadata (
 
 CREATE TABLE live_user_profile (
     userid INT,
-    page_views BIGINT,
-    searches BIGINT,
-    cart_adds BIGINT,
+    recent_page_views BIGINT,
+    recent_searches BIGINT,
+    recent_cart_adds BIGINT,
     active_interest_category VARCHAR,
     active_interest_events BIGINT,
+    intent_window_minutes INT,
     total_orders BIGINT,
     total_purchases BIGINT,
     total_returns BIGINT,
@@ -124,35 +130,60 @@ CREATE TABLE live_product_profile (
 CREATE VIEW user_pageviews AS
 SELECT
     userid,
-    COUNT(*) AS page_views
-FROM clickstream
+    window_end,
+    COUNT(*) AS recent_page_views
+FROM TABLE(
+    HOP(
+        TABLE clickstream,
+        DESCRIPTOR(event_time),
+        INTERVAL '1' MINUTE,
+        INTERVAL '15' MINUTE
+    )
+)
 WHERE event_type = 'product_view'
-GROUP BY userid;
+GROUP BY userid, window_start, window_end;
 
 CREATE VIEW user_intent_totals AS
 SELECT
     userid,
-    SUM(CASE WHEN event_type = 'search' THEN 1 ELSE 0 END) AS searches,
-    SUM(CASE WHEN event_type = 'add_to_cart' THEN 1 ELSE 0 END) AS cart_adds
-FROM clickstream
-GROUP BY userid;
+    window_end,
+    SUM(CASE WHEN event_type = 'search' THEN 1 ELSE 0 END) AS recent_searches,
+    SUM(CASE WHEN event_type = 'add_to_cart' THEN 1 ELSE 0 END) AS recent_cart_adds
+FROM TABLE(
+    HOP(
+        TABLE clickstream,
+        DESCRIPTOR(event_time),
+        INTERVAL '1' MINUTE,
+        INTERVAL '15' MINUTE
+    )
+)
+GROUP BY userid, window_start, window_end;
 
 CREATE VIEW user_category_interest AS
 SELECT
     userid,
+    window_end,
     category,
     COUNT(*) AS active_interest_events
-FROM clickstream
+FROM TABLE(
+    HOP(
+        TABLE clickstream,
+        DESCRIPTOR(event_time),
+        INTERVAL '1' MINUTE,
+        INTERVAL '15' MINUTE
+    )
+)
 WHERE category IS NOT NULL
-GROUP BY userid, category;
+GROUP BY userid, window_start, window_end, category;
 
 CREATE VIEW ranked_user_category_interest AS
 SELECT
     userid,
+    window_end,
     category,
     active_interest_events,
     ROW_NUMBER() OVER (
-        PARTITION BY userid
+        PARTITION BY userid, window_end
         ORDER BY active_interest_events DESC, category ASC
     ) AS category_rank
 FROM user_category_interest;
@@ -172,11 +203,6 @@ SELECT
 FROM cart_updates
 GROUP BY userid;
 
-CREATE VIEW active_userids AS
-SELECT userid FROM user_intent_totals
-UNION
-SELECT userid FROM user_orders;
-
 CREATE VIEW product_orders AS
 SELECT
     productid,
@@ -193,24 +219,27 @@ GROUP BY productid;
 
 INSERT INTO live_user_profile
 SELECT
-    u.userid,
-    COALESCE(p.page_views, 0) AS page_views,
-    COALESCE(t.searches, 0) AS searches,
-    COALESCE(t.cart_adds, 0) AS cart_adds,
+    t.userid,
+    COALESCE(p.recent_page_views, 0) AS recent_page_views,
+    COALESCE(t.recent_searches, 0) AS recent_searches,
+    COALESCE(t.recent_cart_adds, 0) AS recent_cart_adds,
     COALESCE(c.category, 'unknown') AS active_interest_category,
     COALESCE(c.active_interest_events, 0) AS active_interest_events,
+    15 AS intent_window_minutes,
     COALESCE(o.total_orders, 0) AS total_orders,
     COALESCE(o.total_purchases, 0) AS total_purchases,
     COALESCE(o.total_returns, 0) AS total_returns,
     COALESCE(o.avg_order_price, 0.0) AS avg_order_price,
     COALESCE(o.price_sensitivity, 'unknown') AS price_sensitivity,
     CAST(CURRENT_TIMESTAMP AS VARCHAR) AS updated_at
-FROM active_userids u
-LEFT JOIN user_orders o ON u.userid = o.userid
-LEFT JOIN user_pageviews p ON u.userid = p.userid
-LEFT JOIN user_intent_totals t ON u.userid = t.userid
+FROM user_intent_totals t
+LEFT JOIN user_orders o ON t.userid = o.userid
+LEFT JOIN user_pageviews p
+    ON t.userid = p.userid AND t.window_end = p.window_end
 LEFT JOIN ranked_user_category_interest c
-    ON u.userid = c.userid AND c.category_rank = 1;
+    ON t.userid = c.userid
+    AND t.window_end = c.window_end
+    AND c.category_rank = 1;
 
 INSERT INTO live_product_profile
 SELECT

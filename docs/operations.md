@@ -32,8 +32,10 @@ Expected local endpoints:
 | Schema Registry | `http://localhost:8081` |
 | Kafka Connect | `http://localhost:8083` |
 | Flink UI | `http://localhost:8080` |
+| Redpanda Console | `http://localhost:8088` |
 | Prometheus | `http://localhost:9090` |
 | Grafana | `http://localhost:3000` |
+| Langfuse | `http://localhost:3001` |
 
 ## Submit Flink Jobs
 
@@ -99,6 +101,20 @@ Install and start the default local model:
 ollama pull qwen3.5:4b
 ollama serve
 ```
+
+Optional Langfuse tracing:
+
+1. Open `http://localhost:3001`.
+2. Create a local Langfuse account, organization, project, and API keys.
+3. Export the keys before running agents:
+
+```bash
+export LANGFUSE_HOST=http://localhost:3001
+export LANGFUSE_PUBLIC_KEY=pk-lf-...
+export LANGFUSE_SECRET_KEY=sk-lf-...
+```
+
+When those variables are present, agent runs emit Langfuse traces for Kafka profile reads, vector search matches, product lookups, final answers, and recommendation writes. Without the variables, tracing is skipped and the agents run normally.
 
 Run a one-shot interactive test:
 

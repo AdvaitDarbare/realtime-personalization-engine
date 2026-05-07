@@ -16,7 +16,9 @@ def watch_for_updates():
         auto_offset_reset='latest',  # only new updates
         enable_auto_commit=True,
         group_id='agent-trigger-group',
-        consumer_timeout_ms=60000
+        consumer_timeout_ms=60000,
+        max_poll_interval_ms=900000,
+        max_poll_records=1,
     )
     
     processed_users = set()
@@ -30,9 +32,10 @@ def watch_for_updates():
         userid = profile.get('userid')
         total_orders = profile.get('total_orders', 0)
         
-        # Only trigger agent if user has at least 2 orders
-        # and we haven't processed them recently
-        if total_orders >= 2 and userid not in processed_users:
+        # Trigger when user has a valid price sensitivity (at least 1 cart event)
+        # and we haven't processed them in this session
+        price_sensitivity = profile.get('price_sensitivity', 'unknown')
+        if price_sensitivity != 'unknown' and userid not in processed_users:
             print(f"\nTriggering Personalization Agent for user {userid}")
             print(f"Profile: orders={total_orders}, sensitivity={profile.get('price_sensitivity')}")
             

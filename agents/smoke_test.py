@@ -14,10 +14,13 @@ EXPECTED_CONTAINERS = {
     "kafka",
     "schema-registry",
     "kafka-connect",
+    "redpanda-console",
     "flink-jobmanager",
     "flink-taskmanager",
     "prometheus",
     "grafana",
+    "langfuse-db",
+    "langfuse",
 }
 EXPECTED_TOPICS = {
     "shoe-clickstream",
@@ -149,7 +152,15 @@ def profiles_exist():
     products_ok = check("Live product profiles", len(products) > 0, f"latest_products={len(products)}")
 
     if users:
-        fields = ["userid", "active_interest_category", "price_sensitivity", "total_orders"]
+        fields = [
+            "userid",
+            "recent_searches",
+            "recent_cart_adds",
+            "active_interest_category",
+            "intent_window_minutes",
+            "price_sensitivity",
+            "total_orders",
+        ]
         shaped_users = [
             profile for profile in users.values()
             if all(field in profile for field in fields)

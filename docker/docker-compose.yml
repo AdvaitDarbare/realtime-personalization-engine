@@ -73,6 +73,28 @@ services:
       CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
       CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
 
+  # ─── KAFKA OBSERVABILITY ───
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:v3.7.1
+    container_name: redpanda-console
+    depends_on:
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_started
+    ports:
+      - "8088:8080"
+    entrypoint: /bin/sh
+    command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml; /app/console'
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["kafka:29092"]
+        schemaRegistry:
+          enabled: true
+          urls: ["http://schema-registry:8081"]
+
 # ─── FLINK JOB MANAGER ───
   flink-jobmanager:
     image: flink:1.18-scala_2.12
@@ -101,6 +123,7 @@ services:
     container_name: flink-taskmanager
     depends_on:
       - flink-jobmanager
+    restart: on-failure
     command: |
       bash -c "
         wget -q -P /opt/flink/lib https://repo1.maven.org/maven2/org/apache/flink/flink-connector-kafka/3.1.0-1.18/flink-connector-kafka-3.1.0-1.18.jar &&
@@ -114,6 +137,8 @@ services:
         jobmanager.rpc.address: flink-jobmanager
         taskmanager.numberOfTaskSlots: 4
         parallelism.default: 2
+        taskmanager.memory.process.size: 2048m
+        taskmanager.memory.managed.fraction: 0.1
         
   # ─── GRAFANA ───
   grafana:
@@ -138,5 +163,40 @@ services:
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
 
+  # ─── AGENTIC OBSERVABILITY ───
+  langfuse-db:
+    image: postgres:16-alpine
+    container_name: langfuse-db
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: langfuse
+      POSTGRES_DB: langfuse
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - langfuse-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse -d langfuse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  langfuse:
+    image: langfuse/langfuse:2
+    container_name: langfuse
+    depends_on:
+      langfuse-db:
+        condition: service_healthy
+    ports:
+      - "3001:3000"
+    environment:
+      DATABASE_URL: postgresql://langfuse:langfuse@langfuse-db:5432/langfuse
+      NEXTAUTH_SECRET: local-dev-nextauth-secret-change-me
+      SALT: local-dev-salt-change-me
+      NEXTAUTH_URL: http://localhost:3001
+      TELEMETRY_ENABLED: "false"
+      TZ: UTC
+
 volumes:
   grafana-data:
+  langfuse-db-data:

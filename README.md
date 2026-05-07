@@ -20,7 +20,7 @@ The README gives you the quick path through the project. The deeper learning doc
 - **Flink SQL** for continuous stream transformation: aggregations, multi-stream joins, and upsert sinks that maintain a live state per key.
 - **Vector search** with ChromaDB: product descriptions and attributes are embedded into a local semantic model so agents can find products by meaning, not just category or price.
 - **Agentic applications**: CrewAI agents use Kafka reads and vector search as tools, reason with an LLM, and write their output back to Kafka.
-- **Grafana and Prometheus** as the observability layer for watching the system in real time.
+- **Grafana and Prometheus** for live business metrics, **Redpanda Console** for Kafka topic/consumer visibility, and **Langfuse** for agent/tool/vector traces.
 
 ## Architecture
 
@@ -44,7 +44,7 @@ flowchart LR
     end
 
     subgraph Flink["3. Flink SQL (Docker) - streaming computation"]
-        FU["live_user_profile job\npage views + intent + price sensitivity"]
+        FU["live_user_profile job\n15-min intent + price sensitivity"]
         FP["live_product_profile job\ninventory + demand + ratings"]
     end
 
@@ -60,6 +60,8 @@ flowchart LR
     subgraph Dashboard["6. Observability (Docker)"]
         P["Prometheus"]
         G["Grafana"]
+        RC["Redpanda Console\nKafka topics + consumer groups"]
+        LF["Langfuse\nagent traces + tool calls"]
     end
 
     C --> TC
@@ -87,7 +89,9 @@ flowchart LR
     MA --> TR
 
     Kafka --> P --> G
+    Kafka --> RC
     Flink --> P
+    Agents --> LF
 ```
 
 ## How One Recommendation Is Produced
@@ -105,7 +109,7 @@ sequenceDiagram
     Prod->>Kafka: clickstream events (user browses running shoes)
     Prod->>Kafka: cart events (user buys AD-001 for $149)
     Kafka->>Flink: consume shoe-clickstream + cart-updates
-    Flink->>Kafka: upsert live-user-profile\n{userid:42, active_interest_category:"running", price_sensitivity:"low"}
+    Flink->>Kafka: upsert live-user-profile\n{userid:42, active_interest_category:"running", intent_window_minutes:15, price_sensitivity:"low"}
     Flink->>Kafka: upsert live-product-profile\n{productid:"NB-001", stock:12, stock_trend:"low"}
     Agent->>Kafka: get_user_profile(42) - reads live-user-profile
     Agent->>VDB: find_similar_products("premium running shoe")\n- [NB-001, AD-001, NK-009, NB-003, AS-001]
@@ -163,9 +167,9 @@ The important Kafka learning idea is that every subsystem communicates through t
 
 The user profile job combines:
 
-- Page views from clickstream.
-- Searches and cart adds from clickstream.
-- Active interest category from the most frequent observed category.
+- Recent page views from a rolling 15-minute clickstream window.
+- Recent searches and cart adds from the same rolling window.
+- Active interest category from the most frequent category in the current 15-minute intent window.
 - Order count, purchase count, return count, and average order price from cart events.
 - Price sensitivity derived from average order price.
 
@@ -212,7 +216,7 @@ The agents live in `agents/`.
 **Personalization agent tools**:
 
 1. `Find Similar Products` - queries ChromaDB with a semantic description of the user's intent (e.g. "cushioned running shoe"). Returns the 5 most relevant product IDs by meaning.
-2. `Get Live User Profile` - reads from `live-user-profile` (Flink output). Returns price sensitivity, active interest category, order history.
+2. `Get Live User Profile` - reads from `live-user-profile` (Flink output). Returns recent intent-window behavior, price sensitivity, active interest category, and order history.
 3. `Get Live Product Profile` - reads from `live-product-profile` (Flink output). Returns live stock, demand score, current price for a specific product.
 4. `Get All Products` - returns all 30 live product profiles at once for broad comparisons.
 
@@ -497,8 +501,8 @@ docker logs grafana | grep -i dashboard
 - View: reusable streaming query.
 - Continuous aggregation: query updates forever as events arrive.
 - Upsert sink: output stream where records with the same key replace older records.
-- Processing time: the job uses `PROCTIME()` for learning simplicity.
-- Windowing: not currently implemented in `flink/jobs.sql`; adding a one-hour rolling intent window is a good next step.
+- Event time: clickstream uses the producer `ts` field plus a watermark so intent is based on when the event happened.
+- Rolling window: user intent is recomputed from a 15-minute hopping window, so active interest follows recent behavior.
 
 ### Agent concepts
 
@@ -513,7 +517,7 @@ docker logs grafana | grep -i dashboard
 Working:
 
 - Kafka event ingestion from all four producers.
-- Flink live user profile job (page views, intent category, price sensitivity).
+- Flink live user profile job (15-minute intent window, active category, price sensitivity).
 - Flink live product profile job (stock trend, demand score, ratings).
 - Semantic vector search via ChromaDB with local `all-MiniLM-L6-v2` embeddings.
 - Personalization agent: semantic search -> live profile lookup -> Ollama/Qwen recommendation.
@@ -524,7 +528,6 @@ Working:
 
 Good next improvements:
 
-- Add time windows to the Flink SQL so "active interest" means "recent 1-hour interest", not all-time interest.
 - Move recommendation candidate filtering/ranking into deterministic Python code, then ask the LLM to explain the chosen product.
 - Add a small FastAPI service for agent calls instead of only CLI scripts.
 - Add deterministic producer seed modes for repeatable demos.

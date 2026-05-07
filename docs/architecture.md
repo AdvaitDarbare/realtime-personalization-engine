@@ -39,6 +39,8 @@ flowchart LR
     subgraph Obs["Observability"]
         P["Prometheus"]
         G["Grafana"]
+        RC["Redpanda Console"]
+        LF["Langfuse"]
     end
 
     CP --> T1
@@ -62,6 +64,8 @@ flowchart LR
     T7 --> EXP
     EXP --> P
     P --> G
+    Kafka --> RC
+    AG --> LF
 ```
 
 ## Responsibility Boundaries
@@ -76,7 +80,21 @@ ChromaDB owns semantic retrieval. It indexes product descriptions and attributes
 
 The agents own decision and explanation. They fetch the current profile state, use vector search to form candidates, ask the local LLM to reason over those candidates, and write the result back to Kafka.
 
-Prometheus and Grafana own visibility. The exporter reads Kafka and converts business state into time-series metrics that can be graphed.
+Prometheus and Grafana own live business visibility. The exporter reads Kafka and converts business state into time-series metrics that can be graphed.
+
+Redpanda Console owns Kafka visibility. It lets you inspect topics, message payloads, partitions, offsets, and consumer groups without dropping into CLI commands.
+
+Langfuse owns agentic visibility. Agent runs emit traces for profile lookups, vector retrieval, product profile checks, final answers, and recommendation writes when Langfuse credentials are configured.
+
+## Observability Surfaces
+
+| Surface | URL | What it answers |
+| --- | --- | --- |
+| Grafana | `http://localhost:3000` | Are business signals changing live? |
+| Prometheus | `http://localhost:9090` | What metrics is the exporter exposing? |
+| Flink UI | `http://localhost:8080` | Are streaming jobs running and processing records? |
+| Redpanda Console | `http://localhost:8088` | What is in Kafka topics, and are consumers keeping up? |
+| Langfuse | `http://localhost:3001` | What did the agent do during a recommendation run? |
 
 ## Topic Contracts
 
@@ -96,11 +114,18 @@ Raw event topics append facts forever: user 42 viewed product A, then searched r
 
 `live-user-profile` is keyed by `userid`. Every new profile row for user 42 supersedes the previous row for user 42. Kafka still stores the event log, but consumers can interpret it as a changing table. This is why Flink uses the `upsert-kafka` connector for the profile outputs.
 
-## Processing Time
+## Event Time And Rolling Intent
 
-The Flink SQL uses `PROCTIME()`, which means records are processed according to the time they reach Flink, not the original event timestamp in the payload. That keeps the learning project simple.
+The clickstream table uses event time from the producer `ts` field:
 
-Production systems often use event time and watermarks because events can arrive late or out of order. A future version of this project could define event-time columns from `ts` and then build rolling one-hour windows for active intent.
+```sql
+event_time AS TO_TIMESTAMP_LTZ(ts, 3),
+WATERMARK FOR event_time AS event_time - INTERVAL '5' SECOND
+```
+
+Flink then computes user intent from a 15-minute hopping window that advances every minute. That means `active_interest_category`, `recent_page_views`, `recent_searches`, and `recent_cart_adds` describe what the user has been doing recently, not their all-time behavior.
+
+Purchase history remains cumulative because price sensitivity is a longer-lived user trait. This split is intentional: the profile combines stable commercial history with live session intent.
 
 ## Deployment Shape
 
@@ -110,7 +135,7 @@ Inside Docker, services talk to Kafka as `kafka:29092`. Outside Docker, local Py
 
 ## Current Limitations
 
-The live profiles are all-time aggregations, not recent rolling windows. The word "active" in `active_interest_category` means "most observed category so far" in the current SQL.
+The clickstream intent window is processing recent behavior, but it is still a simple 15-minute count-based feature. Production systems might add session boundaries, decayed scores, device context, or learned intent models.
 
 The vector index is in memory and rebuilt on first agent call in each process. That is useful for learning, but production systems normally persist embeddings and update them incrementally.
 

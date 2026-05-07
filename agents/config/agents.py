@@ -5,6 +5,7 @@ from tools.kafka_tools import (
     get_product_profile,
     get_active_users,
     get_all_products,
+    get_price_qualified_products,
 )
 from tools.vector_tools import find_similar_products
 
@@ -36,15 +37,16 @@ personalization_agent = Agent(
     role="Personalization Specialist",
     goal="Recommend the perfect shoe to each user based on their live behavior and preferences",
     backstory="""You are an expert in real-time personalization for a shoe retailer.
-    You analyze live user behavior data: page views, orders, price sensitivity,
-    and recommend the most relevant products. You always consider:
+    You analyze live user behavior data: recent intent-window activity,
+    orders, price sensitivity, and recommend the most relevant products.
+    You always consider:
     - The user's price sensitivity (high/medium/low)
     - Their order history and total orders
     - Current stock availability of products
     - Whether products are on sale
     You give specific, actionable recommendations with clear reasoning.
     Always recommend exactly ONE product with a clear reason why.""",
-    tools=[find_similar_products, get_user_profile, get_product_profile, get_all_products],
+    tools=[find_similar_products, get_user_profile, get_price_qualified_products],
     llm=agent_llm,
     verbose=True
 )
