@@ -1,286 +1,191 @@
-"""
-Prometheus exporter for shoe-personalization business metrics.
-
-Reads from three Kafka topics every SCRAPE_INTERVAL seconds:
-  - live-user-profile    (written by Flink)
-  - live-product-profile (written by Flink)
-  - recommendations      (written by agents)
-
-Exposes metrics on http://localhost:8888/metrics so Prometheus
-(running in Docker) can scrape via host.docker.internal:8888.
-
-Run:
-    cd /path/to/shoe-personalization
-    source agents/venv/bin/activate
-    python monitoring/kafka_exporter.py
-"""
-
 import json
+import os
 import time
-import threading
-import logging
-from collections import defaultdict, Counter
+from collections import Counter
 
 from kafka import KafkaConsumer, TopicPartition
-from prometheus_client import start_http_server, Gauge, Counter as PromCounter
+from prometheus_client import Gauge, start_http_server
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-log = logging.getLogger(__name__)
 
-BOOTSTRAP = "localhost:9092"
-PORT = 8888
-SCRAPE_INTERVAL = 15  # seconds between Kafka reads
+BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+PORT = int(os.getenv("METRICS_PORT", "8888"))
+SCRAPE_INTERVAL_SECONDS = int(os.getenv("SCRAPE_INTERVAL_SECONDS", "15"))
 
-# ─── Prometheus metrics ───────────────────────────────────────────────────────
 
-users_by_sensitivity = Gauge(
-    "shoe_users_total",
-    "Number of users per price sensitivity tier",
+live_users_total = Gauge("shoe_live_users_total", "Live user profile count")
+valid_user_profiles_total = Gauge("shoe_valid_user_profiles_total", "User profiles with known price sensitivity")
+live_products_total = Gauge("shoe_live_products_total", "Live product profile count")
+low_stock_products_total = Gauge("shoe_low_stock_products_total", "Products with low stock trend")
+products_on_sale_total = Gauge("shoe_products_on_sale_total", "Products currently on sale")
+avg_order_price_all = Gauge("shoe_avg_order_price_all", "Average order price across valid user profiles")
+avg_effective_product_price = Gauge(
+    "shoe_avg_effective_product_price",
+    "Average effective product price after sale pricing",
+)
+recommendations_total = Gauge("shoe_recommendations_total", "Recommendation events by agent", ["agent_type"])
+users_by_price_sensitivity = Gauge(
+    "shoe_users_by_price_sensitivity",
+    "Users by price sensitivity",
     ["price_sensitivity"],
 )
-users_by_category = Gauge(
-    "shoe_users_by_category",
-    "Number of users per active interest category",
+users_by_active_category = Gauge(
+    "shoe_users_by_active_category",
+    "Users by active interest category",
     ["category"],
 )
-avg_order_price = Gauge(
-    "shoe_avg_order_price",
-    "Mean avg_order_price across all live user profiles",
+product_stock = Gauge("shoe_product_stock", "Latest stock by product", ["productid", "name"])
+product_effective_price = Gauge(
+    "shoe_product_effective_price",
+    "Effective product price by product",
+    ["productid", "name", "category"],
 )
-products_total = Gauge(
-    "shoe_products_total",
-    "Total number of products with a live profile",
+user_profile_info = Gauge(
+    "shoe_user_profile_info",
+    "Current user context as labels for Grafana table views",
+    [
+        "userid",
+        "category",
+        "price_sensitivity",
+        "recent_searches",
+        "recent_cart_adds",
+        "total_orders",
+        "avg_order_price",
+    ],
 )
-products_low_stock = Gauge(
-    "shoe_products_low_stock",
-    "Number of products where stock_trend is low",
-)
-products_on_sale = Gauge(
-    "shoe_products_on_sale",
-    "Number of products currently on sale",
-)
-product_demand_score = Gauge(
-    "shoe_product_demand_score",
-    "Live demand score per product",
-    ["productid", "name"],
-)
-product_stock = Gauge(
-    "shoe_product_stock",
-    "Current stock units per product",
-    ["productid", "name"],
-)
-recommendations_total = Gauge(
-    "shoe_recommendations_total",
-    "Total recommendation events per agent type",
-    ["agent_type"],
+product_profile_info = Gauge(
+    "shoe_product_profile_info",
+    "Current product context as labels for Grafana table views",
+    [
+        "productid",
+        "name",
+        "category",
+        "price",
+        "sale_price",
+        "effective_price",
+        "on_sale",
+        "stock",
+        "stock_trend",
+        "demand_score",
+    ],
 )
 
 
-# ─── Kafka helpers ────────────────────────────────────────────────────────────
-
-def read_latest(topic: str, key_field: str, lookback_per_partition: int = 20000) -> dict:
-    """Read a bounded recent window and return the latest value per key_field."""
+def read_topic(topic: str, key_field: str | None = None, lookback_per_partition: int = 50000):
     consumer = KafkaConsumer(
-        bootstrap_servers=BOOTSTRAP,
+        bootstrap_servers=BOOTSTRAP_SERVERS,
         value_deserializer=lambda m: json.loads(m.decode("utf-8")) if m else None,
-        key_deserializer=lambda m: m.decode("utf-8") if m else None,
         enable_auto_commit=False,
         consumer_timeout_ms=1000,
     )
-
-    records = {}
+    records = {} if key_field else []
     try:
         partitions = consumer.partitions_for_topic(topic)
         if not partitions:
             return records
-
-        topic_partitions = [TopicPartition(topic, partition) for partition in partitions]
+        topic_partitions = [TopicPartition(topic, p) for p in partitions]
         consumer.assign(topic_partitions)
         end_offsets = consumer.end_offsets(topic_partitions)
-
         for topic_partition in topic_partitions:
-            end_offset = end_offsets.get(topic_partition, 0)
-            start_offset = max(0, end_offset - lookback_per_partition)
-            consumer.seek(topic_partition, start_offset)
+            consumer.seek(topic_partition, max(0, end_offsets[topic_partition] - lookback_per_partition))
 
-        remaining = set(topic_partitions)
         deadline = time.time() + 3
-        while remaining and time.time() < deadline:
+        while time.time() < deadline:
             batches = consumer.poll(timeout_ms=200, max_records=1000)
             if not batches:
                 break
-
-            for topic_partition, messages in batches.items():
-                for msg in messages:
-                    if msg.value and msg.value.get(key_field) is not None:
-                        records[msg.value[key_field]] = msg.value
-
-            for topic_partition in list(remaining):
-                if consumer.position(topic_partition) >= end_offsets.get(topic_partition, 0):
-                    remaining.remove(topic_partition)
+            for messages in batches.values():
+                for message in messages:
+                    if not message.value:
+                        continue
+                    if key_field:
+                        key = message.value.get(key_field)
+                        if key is not None:
+                            records[key] = message.value
+                    else:
+                        records.append(message.value)
     finally:
         consumer.close()
-
     return records
 
 
-def read_recent(topic: str, lookback_per_partition: int = 20000) -> list:
-    """Read a bounded recent window from a topic and return records without deduping."""
-    consumer = KafkaConsumer(
-        bootstrap_servers=BOOTSTRAP,
-        value_deserializer=lambda m: json.loads(m.decode("utf-8")) if m else None,
-        key_deserializer=lambda m: m.decode("utf-8") if m else None,
-        enable_auto_commit=False,
-        consumer_timeout_ms=1000,
+def collect_once():
+    users = read_topic("live-user-profile", "userid")
+    products = read_topic("live-product-profile", "productid")
+    recommendations = read_topic("recommendations")
+
+    live_users_total.set(len(users))
+    live_products_total.set(len(products))
+    valid_users = [u for u in users.values() if u.get("price_sensitivity") != "unknown"]
+    live_products = list(products.values())
+    low_stock_products_total.set(sum(1 for p in live_products if p.get("stock_trend") == "low"))
+    products_on_sale_total.set(sum(1 for p in live_products if p.get("on_sale")))
+    valid_user_profiles_total.set(len(valid_users))
+
+    order_prices = [float(u.get("avg_order_price") or 0) for u in valid_users if u.get("avg_order_price")]
+    avg_order_price_all.set(sum(order_prices) / len(order_prices) if order_prices else 0)
+
+    sensitivity_counts = Counter(p.get("price_sensitivity", "unknown") for p in users.values())
+    category_counts = Counter(p.get("active_interest_category", "unknown") for p in users.values())
+    for sensitivity, count in sensitivity_counts.items():
+        users_by_price_sensitivity.labels(price_sensitivity=sensitivity).set(count)
+    for category, count in category_counts.items():
+        users_by_active_category.labels(category=category).set(count)
+
+    recommendation_counts = Counter(r.get("agent_type", "unknown") for r in recommendations)
+    for agent_type, count in recommendation_counts.items():
+        recommendations_total.labels(agent_type=agent_type).set(count)
+
+    effective_prices = []
+    for product in live_products:
+        price = float(product.get("price") or 0)
+        sale_price = product.get("sale_price")
+        on_sale = bool(product.get("on_sale"))
+        effective_price = float(sale_price) if on_sale and sale_price is not None else price
+        effective_prices.append(effective_price)
+        product_stock.labels(
+            productid=str(product.get("productid", "")),
+            name=str(product.get("name", "")),
+        ).set(product.get("stock") or 0)
+        product_effective_price.labels(
+            productid=str(product.get("productid", "")),
+            name=str(product.get("name", "")),
+            category=str(product.get("category", "")),
+        ).set(effective_price)
+        product_profile_info.labels(
+            productid=str(product.get("productid", "")),
+            name=str(product.get("name", "")),
+            category=str(product.get("category", "")),
+            price=f"{price:.2f}",
+            sale_price="" if sale_price is None else f"{float(sale_price):.2f}",
+            effective_price=f"{effective_price:.2f}",
+            on_sale=str(on_sale).lower(),
+            stock=str(product.get("stock") or 0),
+            stock_trend=str(product.get("stock_trend", "")),
+            demand_score=f"{float(product.get('demand_score') or 0):.2f}",
+        ).set(1)
+
+    avg_effective_product_price.set(sum(effective_prices) / len(effective_prices) if effective_prices else 0)
+
+    for user in valid_users:
+        user_profile_info.labels(
+            userid=str(user.get("userid", "")),
+            category=str(user.get("active_interest_category", "")),
+            price_sensitivity=str(user.get("price_sensitivity", "")),
+            recent_searches=str(user.get("recent_searches") or 0),
+            recent_cart_adds=str(user.get("recent_cart_adds") or 0),
+            total_orders=str(user.get("total_orders") or 0),
+            avg_order_price=f"{float(user.get('avg_order_price') or 0):.2f}",
+        ).set(1)
+
+    print(
+        f"metrics updated: users={len(users)} products={len(products)} recommendations={len(recommendations)}",
+        flush=True,
     )
-
-    records = []
-    try:
-        partitions = consumer.partitions_for_topic(topic)
-        if not partitions:
-            return records
-
-        topic_partitions = [TopicPartition(topic, partition) for partition in partitions]
-        consumer.assign(topic_partitions)
-        end_offsets = consumer.end_offsets(topic_partitions)
-
-        for topic_partition in topic_partitions:
-            end_offset = end_offsets.get(topic_partition, 0)
-            start_offset = max(0, end_offset - lookback_per_partition)
-            consumer.seek(topic_partition, start_offset)
-
-        remaining = set(topic_partitions)
-        deadline = time.time() + 3
-        while remaining and time.time() < deadline:
-            batches = consumer.poll(timeout_ms=200, max_records=1000)
-            if not batches:
-                break
-
-            for topic_partition, messages in batches.items():
-                records.extend(msg.value for msg in messages if msg.value)
-
-            for topic_partition in list(remaining):
-                if consumer.position(topic_partition) >= end_offsets.get(topic_partition, 0):
-                    remaining.remove(topic_partition)
-    finally:
-        consumer.close()
-
-    return records
-
-
-# ─── Metric update logic ──────────────────────────────────────────────────────
-
-def update_user_metrics():
-    profiles = read_latest("live-user-profile", "userid")
-    if not profiles:
-        log.warning("live-user-profile: no records found")
-        return
-
-    sensitivity_counts: Counter = Counter()
-    category_counts: Counter = Counter()
-    order_prices = []
-
-    for p in profiles.values():
-        sensitivity_counts[p.get("price_sensitivity", "unknown")] += 1
-        cat = p.get("active_interest_category")
-        if cat and cat != "unknown":
-            category_counts[cat] += 1
-        price = p.get("avg_order_price", 0)
-        if price and price > 0:
-            order_prices.append(price)
-
-    for tier, count in sensitivity_counts.items():
-        users_by_sensitivity.labels(price_sensitivity=tier).set(count)
-
-    for cat, count in category_counts.items():
-        users_by_category.labels(category=cat).set(count)
-
-    if order_prices:
-        avg_order_price.set(sum(order_prices) / len(order_prices))
-
-    log.info(f"Users: {len(profiles)} profiles | sensitivity: {dict(sensitivity_counts)}")
-
-
-def update_product_metrics():
-    profiles = read_latest("live-product-profile", "productid")
-    if not profiles:
-        log.warning("live-product-profile: no records found")
-        return
-
-    low_stock = sum(1 for p in profiles.values() if p.get("stock_trend") == "low")
-    on_sale = sum(1 for p in profiles.values() if p.get("on_sale"))
-
-    products_total.set(len(profiles))
-    products_low_stock.set(low_stock)
-    products_on_sale.set(on_sale)
-
-    for p in profiles.values():
-        pid = p.get("productid", "")
-        name = p.get("name", "")
-        product_demand_score.labels(productid=pid, name=name).set(
-            p.get("demand_score", 0)
-        )
-        product_stock.labels(productid=pid, name=name).set(p.get("stock", 0))
-
-    log.info(f"Products: {len(profiles)} | low_stock: {low_stock} | on_sale: {on_sale}")
-
-
-def update_recommendation_metrics():
-    records = read_recent("recommendations")
-    if not records:
-        log.warning("recommendations: no records found")
-        return
-
-    counts: Counter = Counter()
-    for r in records:
-        agent = r.get("agent_type", "unknown")
-        counts[agent] += 1
-
-    for agent, count in counts.items():
-        recommendations_total.labels(agent_type=agent).set(count)
-
-    log.info(f"Recommendations: {dict(counts)}")
-
-
-def collect_all():
-    log.info("--- collecting metrics ---")
-    try:
-        update_user_metrics()
-    except Exception as e:
-        log.error(f"user metrics error: {e}")
-    try:
-        update_product_metrics()
-    except Exception as e:
-        log.error(f"product metrics error: {e}")
-    try:
-        update_recommendation_metrics()
-    except Exception as e:
-        log.error(f"recommendation metrics error: {e}")
-
-
-# ─── Main loop ────────────────────────────────────────────────────────────────
-
-def run_loop():
-    while True:
-        collect_all()
-        time.sleep(SCRAPE_INTERVAL)
 
 
 if __name__ == "__main__":
-    log.info(f"Starting Prometheus exporter on :{PORT}")
-    start_http_server(PORT)
-
-    # Initial collection before entering the loop
-    collect_all()
-
-    # Run collection in a background thread so the HTTP server stays responsive
-    t = threading.Thread(target=run_loop, daemon=True)
-    t.start()
-
-    log.info(f"Metrics available at http://localhost:{PORT}/metrics")
-    log.info("Press Ctrl+C to stop.")
-    try:
-        while True:
-            time.sleep(60)
-    except KeyboardInterrupt:
-        log.info("Exporter stopped.")
+    start_http_server(PORT, addr="0.0.0.0")
+    print(f"Kafka metrics exporter listening on http://localhost:{PORT}/metrics", flush=True)
+    while True:
+        collect_once()
+        time.sleep(SCRAPE_INTERVAL_SECONDS)

@@ -17,7 +17,7 @@
 #       |
 # write_recommendation() - writes output back to Kafka
 #       |
-# recommendations topic - Grafana reads this
+# recommendations topic - downstream consumers can read this
 
 
 import json
@@ -339,8 +339,8 @@ def get_price_qualified_products(price_sensitivity: str, avg_order_price: float,
     """Return products that qualify for a given price sensitivity tier.
 
     Filters the catalog by eff_price (sale_price if on_sale, else price):
-      - high   : eff_price ≤ 90
-      - medium : 80 ≤ eff_price ≤ 120
+      - high   : eff_price <= 90
+      - medium : 80 <= eff_price <= 120
       - low    : any eff_price (no filter)
 
     Args:
@@ -353,6 +353,12 @@ def get_price_qualified_products(price_sensitivity: str, avg_order_price: float,
     """
     t0 = time.time()
     products = latest_product_profiles()
+    price_sensitivity = str(price_sensitivity or "").lower()
+    category = str(category or "")
+    try:
+        avg_order_price = float(avg_order_price)
+    except (TypeError, ValueError):
+        avg_order_price = 0.0
 
     qualified = []
     for p in products:

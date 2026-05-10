@@ -10,22 +10,19 @@ from tools.kafka_tools import (
 from tools.vector_tools import find_similar_products
 
 def build_llm() -> LLM:
-    provider = os.getenv("AGENT_LLM_PROVIDER", "ollama")
-    model = os.getenv("AGENT_LLM_MODEL", "qwen3.5:4b")
-    base_url = os.getenv("AGENT_LLM_BASE_URL", "http://localhost:11434")
-
-    if provider == "ollama":
-        return LLM(
-            model=model,
-            provider="ollama",
-            base_url=base_url,
-            temperature=0.2,
-            timeout=120,
+    model = os.getenv("AGENT_LLM_MODEL", "gpt-4o-mini").strip()
+    if not os.getenv("OPENAI_API_KEY"):
+        raise RuntimeError(
+            "OPENAI_API_KEY is required. Add it to .env or export it before running the agents."
+        )
+    if ":" in model and not model.startswith("ft:"):
+        raise RuntimeError(
+            "AGENT_LLM_MODEL should be an OpenAI model name such as gpt-4o-mini."
         )
 
     return LLM(
         model=model,
-        provider=provider,
+        provider="openai",
         temperature=0.2,
         timeout=120,
     )

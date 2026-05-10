@@ -15,7 +15,6 @@ venv/
 venv_py39_backup/
 .venv/
 env/
-.env/
 
 # Environment variables
 .env
@@ -36,6 +35,13 @@ env/
 *.log
 logs/
 
+# Test/cache output
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb
@@ -43,10 +49,12 @@ logs/
 # Docker
 .docker/
 
-# Kafka / Flink state
-__pycache__/
+# Local runtime state
 *.class
 target/
+chroma/
+chroma_db/
+.chroma/
 
 # Node
 node_modules/

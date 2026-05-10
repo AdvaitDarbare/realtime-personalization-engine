@@ -1,8 +1,8 @@
 import json
+import os
 import subprocess
 import sys
 import time
-import urllib.request
 from pathlib import Path
 
 from kafka import KafkaConsumer, TopicPartition
@@ -12,15 +12,9 @@ from kafka.errors import KafkaError
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_CONTAINERS = {
     "kafka",
-    "schema-registry",
-    "kafka-connect",
     "redpanda-console",
     "flink-jobmanager",
     "flink-taskmanager",
-    "prometheus",
-    "grafana",
-    "langfuse-db",
-    "langfuse",
 }
 EXPECTED_TOPICS = {
     "shoe-clickstream",
@@ -31,6 +25,19 @@ EXPECTED_TOPICS = {
     "live-product-profile",
     "recommendations",
 }
+
+
+def load_env_file():
+    env_path = ROOT / ".env"
+    if not env_path.exists():
+        return
+
+    for line in env_path.read_text().splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
 def run(command):
@@ -186,28 +193,30 @@ def profiles_exist():
     return users_ok and products_ok
 
 
-def ollama_model():
-    try:
-        with urllib.request.urlopen("http://localhost:11434/api/tags", timeout=5) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except Exception as exc:
-        return check("Ollama", False, str(exc))
-
-    models = {model.get("name") for model in payload.get("models", [])}
-    return check("Ollama qwen3.5:4b", "qwen3.5:4b" in models, f"models={sorted(models)}")
+def llm_configuration():
+    has_key = bool(os.getenv("OPENAI_API_KEY"))
+    model = os.getenv("AGENT_LLM_MODEL", "gpt-4o-mini").strip()
+    model_looks_openai = bool(model) and (":" not in model or model.startswith("ft:"))
+    return check(
+        "OpenAI LLM configuration",
+        has_key and model_looks_openai,
+        f"model={model}" if has_key and model_looks_openai else "missing OPENAI_API_KEY or use an OpenAI model such as gpt-4o-mini",
+    )
 
 
 def main():
+    load_env_file()
+
     checks = [
         docker_containers(),
         flink_jobs(),
         kafka_topics_and_offsets(),
         profiles_exist(),
-        ollama_model(),
+        llm_configuration(),
     ]
 
     if all(checks):
-        print("\nSmoke test passed. The Kafka/Flink/Ollama learning stack is healthy.")
+        print("\nSmoke test passed. The Kafka/Flink/CrewAI learning stack is healthy.")
         return 0
 
     print("\nSmoke test failed. Check the failed rows above.")

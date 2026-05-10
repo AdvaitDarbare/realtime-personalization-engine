@@ -1,174 +1,275 @@
-# Real-Time Shoe Personalization Engine
+# Real-Time Shoe Personalization
 
-A learning platform for Kafka, Flink, vector search, and agentic AI. Simulates a shoe retailer where live user behavior becomes real-time recommendations in seconds — no batch jobs, no stale cache.
+A small learning project that shows how Kafka, Flink, and CrewAI can work together in an end-to-end streaming data pipeline.
 
-## What This Teaches
+The project simulates a shoe store. Python producers send live clickstream, cart, inventory, and product metadata events into Kafka. Flink SQL turns those raw events into live user and product profiles. A CrewAI agent reads that context, searches a small product index, applies simple price guardrails, and writes a recommendation back to Kafka.
 
-| Layer | Technology | Concept |
-|---|---|---|
-| Event ingestion | Kafka | Topics, partitions, producers, consumer groups, log compaction |
-| Stream processing | Apache Flink SQL | Dynamic tables, HOP windows, watermarks, upsert sinks |
-| Semantic search | ChromaDB + all-MiniLM-L6-v2 | Embeddings, cosine similarity, category pre-filtering |
-| Agentic AI | CrewAI + OpenAI gpt-4o-mini | Tools, tasks, LLM reasoning loop, deterministic guardrails |
-| Observability | Langfuse + Prometheus + Grafana | Agent traces, business metrics, live dashboards |
+This is intentionally not a production platform. It is a practical demo for learning how a real-time AI context layer might work.
 
-## Documentation
+## Inspiration
 
-The README is your entry point. Each doc goes deeper:
+The reference architecture picture describes this pattern:
 
-| Doc | What it covers |
-|---|---|
-| [`docs/architecture.md`](docs/architecture.md) | Every component, data contracts, deployment topology, Docker services, Kafka topic schemas |
-| [`docs/concepts-and-flows.md`](docs/concepts-and-flows.md) | Kafka internals, Flink SQL mechanics, vector search, CrewAI framework, end-to-end data flows with real examples |
-| [`docs/agents.md`](docs/agents.md) | Personalization and merchandising agent logic, tools, task prompts, price-qualified filtering, observability tracing |
-| [`docs/operations.md`](docs/operations.md) | Complete startup runbook, environment variables, health checks, debugging by layer |
+1. User and business events stream into Kafka.
+2. Flink transforms those events into live intent features.
+3. Metadata enriches the context.
+4. A real-time context engine stores current user and product state.
+5. Agents read that context and produce recommendations.
+
+This repo keeps that same shape, but narrows the domain to shoes so the project stays approachable.
+
+| Architecture picture | This project |
+| --- | --- |
+| Clickstream, cart, inventory events | Python producer scripts |
+| Kafka stream | Local Kafka broker in Docker |
+| Flink feature jobs | `flink/jobs.sql` |
+| External metadata and embeddings | `product-metadata` topic plus ChromaDB |
+| Live user/product context | `live-user-profile` and `live-product-profile` Kafka topics |
+| Personalization agent | CrewAI agent in `agents/` |
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    subgraph Producers["Producers (Python)"]
-        C["clickstream_producer\nsearch · product_view · add_to_cart"]
-        O["cart_producer\npurchase · return"]
-        I["inventory_producer\nstock · price · sale"]
-        M["product_metadata_producer\nratings · descriptions"]
-    end
+    C[Clickstream producer] --> K[Kafka topics]
+    A[Cart producer] --> K
+    I[Inventory producer] --> K
+    M[Metadata producer] --> K
 
-    subgraph Kafka["Kafka — event backbone"]
-        TC["shoe-clickstream"]
-        TO["cart-updates"]
-        TI["inventory"]
-        TM["product-metadata"]
-        TUP["live-user-profile\n(upsert, log-compacted)"]
-        TPP["live-product-profile\n(upsert, log-compacted)"]
-        TR["recommendations"]
-    end
+    K --> F[Flink SQL jobs]
+    F --> U[live-user-profile]
+    F --> P[live-product-profile]
 
-    subgraph Flink["Flink SQL — stream processing"]
-        FU["live_user_profile job\n15-min HOP window · price sensitivity"]
-        FP["live_product_profile job\ninventory × demand × ratings"]
-    end
-
-    subgraph VectorDB["ChromaDB — semantic search"]
-        VDB["all-MiniLM-L6-v2\n30 products · cosine distance"]
-    end
-
-    subgraph Agents["CrewAI Agents (Python)"]
-        PA["Personalization Agent\nfind_similar + user_profile + price_qualified"]
-        MA["Merchandising Agent\ndeterministic ranking · no LLM"]
-    end
-
-    subgraph Observability["Observability (Docker)"]
-        LF["Langfuse\nagent + tool traces"]
-        P["Prometheus"]
-        G["Grafana\nbusiness metrics"]
-        RC["Redpanda Console\nKafka visibility"]
-    end
-
-    C --> TC; O --> TO; I --> TI; M --> TM
-    TC --> FU; TO --> FU
-    TO --> FP; TI --> FP; TM --> FP
-    FU -->|upsert per userid| TUP
-    FP -->|upsert per productid| TPP
-    TM -->|read once on startup| VDB
-    TUP --> PA; TPP --> PA; VDB --> PA
-    PA --> TR; MA --> TR
-    TR --> P --> G
-    Kafka --> RC
-    PA --> LF; MA --> LF
+    M --> V[ChromaDB product index]
+    U --> R[CrewAI personalization agent]
+    P --> R
+    V --> R
+    R --> O[recommendations topic]
 ```
 
-## Quick Start
+## What Each Layer Does
 
-**Prerequisites:** Docker Desktop, Python 3.11, an OpenAI API key.
+**Kafka** is the event backbone. The producers do not call Flink or the agent directly. They only write facts to topics like `shoe-clickstream`, `cart-updates`, `inventory`, and `product-metadata`.
+
+**Flink** is the streaming feature builder. It reads those raw topics and continuously updates two compact context topics:
+
+- `live-user-profile`: recent searches, cart adds, active category, order history, average order price, and price sensitivity
+- `live-product-profile`: stock, sale status, demand score, rating, and category
+
+**ChromaDB** is a tiny local semantic product index. It reads product metadata from Kafka and lets the agent search for products using text like `budget everyday running shoe`.
+
+**CrewAI** is the AI layer. The personalization agent uses tools to read the live Kafka profiles, search similar products, filter by price sensitivity in code, and produce one recommendation.
+
+## Repository Structure
+
+```text
+.
+|-- agents/
+|   |-- main.py                  # Watches live user profiles and triggers recommendations
+|   |-- crew.py                  # CrewAI runner functions
+|   |-- smoke_test.py            # Local health check script
+|   |-- config/agents.py         # OpenAI LLM and agent definitions
+|   |-- tasks/tasks.py           # CrewAI task prompts
+|   `-- tools/                   # Kafka and vector-search tools
+|-- docker/docker-compose.yml    # Kafka, topic init, Redpanda Console, Flink
+|-- flink/jobs.sql               # Streaming SQL jobs
+|-- monitoring/kafka_exporter.py # Optional Grafana/Prometheus metrics exporter
+|-- producers/                   # Event generators
+|-- .env.example
+|-- medium_article_draft.md      # Beginner-friendly article draft
+|-- requirements.txt
+`-- README.md
+```
+
+## Prerequisites
+
+- Docker Desktop
+- Python 3.11+
+- An OpenAI API key
+
+## Environment Variables
+
+Create a `.env` file in the repo root:
 
 ```bash
-# 1. Clone and install dependencies
-git clone https://github.com/AdvaitDarbare/realtime-personalization-engine.git
-cd realtime-personalization-engine
-python3.11 -m venv agents/venv
-source agents/venv/bin/activate
-pip install -r requirements.txt
+cp .env.example .env
+```
 
-# 2. Create .env with your credentials
-cat > .env <<EOF
+Then edit it:
+
+```bash
 KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-AGENT_LLM_PROVIDER=openai
 AGENT_LLM_MODEL=gpt-4o-mini
-OPENAI_API_KEY=sk-...
-LANGFUSE_PUBLIC_KEY=pk-lf-...
-LANGFUSE_SECRET_KEY=sk-lf-...
-LANGFUSE_HOST=http://localhost:3001
-EOF
+OPENAI_API_KEY=sk-your-key
+```
 
-# 3. Start Docker infrastructure
-cd docker && docker compose up -d && cd ..
+`AGENT_LLM_MODEL` is optional. It defaults to `gpt-4o-mini`.
 
-# 4. Submit Flink SQL jobs
+The Python scripts load this `.env` file automatically.
+
+## Run Locally
+
+### 1. Install Python Dependencies
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 2. Start Kafka and Flink
+
+```bash
+cd docker
+docker compose up -d
+cd ..
+```
+
+Check the containers:
+
+```bash
+docker compose -f docker/docker-compose.yml ps
+```
+
+Expected services:
+
+- `kafka`
+- `redpanda-console`
+- `flink-jobmanager`
+- `flink-taskmanager`
+
+`kafka-init` should exit successfully after creating the topics.
+
+### 3. Submit the Flink SQL Jobs
+
+```bash
 docker exec -it flink-jobmanager /opt/flink/bin/sql-client.sh -f /opt/flink/jobs/jobs.sql
+```
 
-# 5. Start data producers (separate terminals)
-source agents/venv/bin/activate
-python -u producers/clickstream_producer.py &
-python -u producers/cart_producer.py &
+Verify the jobs:
+
+```bash
+docker exec flink-jobmanager /opt/flink/bin/flink list
+```
+
+You should see jobs for `live_user_profile` and `live_product_profile`.
+
+### 4. Start the Event Producers
+
+Run these in separate terminals, or run them in the background while learning:
+
+```bash
+source .venv/bin/activate
+python -u producers/inventory_producer.py
+python -u producers/product_metadata_producer.py
+python -u producers/clickstream_producer.py
+python -u producers/cart_producer.py
+```
+
+If you run them in the background:
+
+```bash
+source .venv/bin/activate
 python -u producers/inventory_producer.py &
 python -u producers/product_metadata_producer.py &
-
-# 6. Run the agent loop
-cd agents && env $(cat ../.env | grep -v '^#' | xargs) venv/bin/python main.py
+python -u producers/clickstream_producer.py &
+python -u producers/cart_producer.py &
 ```
 
-Open the observability surfaces:
-- **Grafana** → `http://localhost:3000` (admin/admin) — business metrics
-- **Langfuse** → `http://localhost:3001` — agent traces
-- **Flink UI** → `http://localhost:8080` — streaming jobs
-- **Redpanda Console** → `http://localhost:8088` — Kafka topics
+Check Kafka offsets:
 
-## How One Recommendation Is Produced
-
-```
-user browses running shoes, adds to cart
-        ↓ (clickstream + cart-updates → Kafka)
-Flink computes: active_interest_category="running", price_sensitivity="high", avg_order_price=$72
-        ↓ (upsert → live-user-profile)
-Agent wakes up, reads user profile
-        ↓
-ChromaDB: find_similar("budget everyday running shoe active shopper", category="running")
-        → NK-007 (0.513), NK-003 (0.517), NK-002 (0.494)
-        ↓
-get_price_qualified_products(sensitivity="high", avg=$72, category="running")
-        → [NK-007 eff=$79.99] ← only qualifying running shoe ≤ $90
-        ↓
-LLM: cross-reference similarity + qualified → pick NK-007, explain why
-        ↓ (→ recommendations topic)
-"Product: Nike Free Run 5.0 (NK-007) | Price: $79.99 | Stock: 22 units"
+```bash
+docker exec kafka kafka-get-offsets --bootstrap-server localhost:9092 --topic shoe-clickstream
+docker exec kafka kafka-get-offsets --bootstrap-server localhost:9092 --topic live-user-profile
+docker exec kafka kafka-get-offsets --bootstrap-server localhost:9092 --topic live-product-profile
 ```
 
-## Component Summary
+Offsets greater than `0` mean data is flowing.
 
-| Component | File(s) | Role |
-|---|---|---|
-| Clickstream producer | `producers/clickstream_producer.py` | Simulates user browsing: search, product_view, add_to_cart |
-| Cart producer | `producers/cart_producer.py` | Simulates purchases and returns |
-| Inventory producer | `producers/inventory_producer.py` | Simulates stock changes, price updates, sale toggles |
-| Metadata producer | `producers/product_metadata_producer.py` | Simulates ratings, reviews, product descriptions |
-| Flink SQL | `flink/jobs.sql` | 2 streaming jobs: live user profiles + live product profiles |
-| Vector tools | `agents/tools/vector_tools.py` | ChromaDB index build + `find_similar_products` tool |
-| Kafka tools | `agents/tools/kafka_tools.py` | All Kafka read/write tools + price-qualified filtering |
-| Agent config | `agents/config/agents.py` | LLM config, agent definitions, tool assignment |
-| Tasks | `agents/tasks/tasks.py` | Natural-language task prompts for each agent |
-| Crew | `agents/crew.py` | CrewAI crew assembly, Langfuse trace context |
-| Observability | `agents/observability.py` | Langfuse client, trace/span helpers |
-| Agent loop | `agents/main.py` | Watches live-user-profile, triggers agents on new profiles |
-| Metrics exporter | `monitoring/kafka_exporter.py` | Converts Kafka state to Prometheus metrics |
-| Dashboard | `docker/grafana/dashboards/shoe-personalization.json` | Grafana provisioned dashboard |
+### 5. Run the CrewAI Agent
 
-## Key Design Decisions
+```bash
+source .venv/bin/activate
+python agents/main.py
+```
 
-**Merchandising is deterministic.** The ranking of products to promote (low stock + high demand + on sale) is computed in Python, not by the LLM. The LLM is reserved for decisions that require language and reasoning.
+The agent waits for valid live user profiles. Once Flink has processed enough clickstream and cart events, you should see output like:
 
-**Price filtering is code, not LLM arithmetic.** `Get Price Qualified Products` enforces price sensitivity tiers in Python before the LLM ever sees candidates. This prevents the model from recommending a $79.99 shoe to a medium-sensitivity user expecting $80–$120.
+```text
+Triggering Personalization Agent for user 42
+Profile: orders=3, sensitivity=medium
 
-**Vector search uses cosine distance.** Sentence embeddings from `all-MiniLM-L6-v2` are unit vectors; cosine distance is the correct metric. L2 distance (the ChromaDB default) gives wrong rankings for normalized embeddings.
+Recommendation for user 42:
+Product: Nike Pegasus 40 (NK-002)
+Price: $119.99
+Live signal: running interest from recent browsing and cart activity
+Why this user: medium price sensitivity matches their average order price
+Stock: 37 units, medium trend
+```
 
-**Queries vary per user.** The task prompt instructs the agent to build a 4–8 word query using the user's `avg_order_price` and behavior signals (recent_searches, cart_adds), not just their category tier. This prevents identical queries from generating identical recommendations.
+The recommendation is also written to the `recommendations` Kafka topic.
+
+## Useful Local URLs
+
+- Flink UI: [http://localhost:8080](http://localhost:8080)
+- Redpanda Console: [http://localhost:8088](http://localhost:8088)
+- Grafana dashboard: [http://localhost:3000/d/shoe-personalization/shoe-personalization-learning-dashboard](http://localhost:3000/d/shoe-personalization/shoe-personalization-learning-dashboard) (`admin` / `admin`)
+- Prometheus: [http://localhost:9090](http://localhost:9090)
+
+## Smoke Test
+
+After the stack, producers, and Flink jobs are running:
+
+```bash
+source .venv/bin/activate
+python agents/smoke_test.py
+```
+
+The smoke test checks:
+
+- Docker services are running
+- Kafka topics exist and have messages
+- Flink profile jobs are running
+- Live user and product profiles exist
+- OpenAI configuration is present
+
+## Troubleshooting
+
+**Flink jobs are running but profile topics are empty**
+
+Submit the Flink jobs before starting or restarting the producers. The SQL sources use `latest-offset`, so Flink only processes new events.
+
+**The agent says no user profile was found**
+
+Let the clickstream and cart producers run for a minute or two. The agent only triggers after Flink has enough data to create a profile with a known price sensitivity.
+
+**The vector index is empty**
+
+Run `product_metadata_producer.py` before the agent. The ChromaDB index is built lazily on the first semantic search.
+
+**OpenAI errors**
+
+Check that `.env` exists and includes `OPENAI_API_KEY`. You can also export it directly:
+
+```bash
+export OPENAI_API_KEY=sk-your-key
+```
+
+**Kafka connection refused**
+
+Make sure Docker is running and Kafka is healthy:
+
+```bash
+docker compose -f docker/docker-compose.yml ps
+docker logs kafka --tail 50
+```
+
+## Why the Project Stays Small
+
+The important learning flow is:
+
+```text
+events -> Kafka -> Flink profiles -> CrewAI tools -> recommendation
+```
+
+Everything else is intentionally kept simple. There is no web app, no schema registry, and no Kafka Connect. Grafana is included only as a lightweight learning dashboard so you can see the live profile and recommendation counts.

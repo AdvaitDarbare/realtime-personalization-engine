@@ -1,13 +1,29 @@
 import json
+import os
 import time
 import random
 from kafka import KafkaProducer
 
-# Connect to Kafka
+
+def load_env_file():
+    env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
+    if not os.path.exists(env_path):
+        return
+    with open(env_path, "r", encoding="utf-8") as env_file:
+        for line in env_file:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or "=" not in stripped:
+                continue
+            key, value = stripped.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+load_env_file()
+
 producer = KafkaProducer(
-    bootstrap_servers='localhost:9092', # this is where our kafka broker is running
-    value_serializer=lambda v: json.dumps(v).encode('utf-8'), # this is how we serialize the value to a JSON string
-    key_serializer=lambda k: k.encode('utf-8') # this is how we serialize the key to a JSON string
+    bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
+    value_serializer=lambda v: json.dumps(v).encode('utf-8'),
+    key_serializer=lambda k: k.encode('utf-8')
 )
 
 # Our shoe inventory - 30 real products
@@ -85,7 +101,7 @@ def send_inventory():
             key=product['productid'],
             value=event
         )
-        print(f"Stock update: {product['name']} → stock: {event['stock']}")
+        print(f"Stock update: {product['name']} -> stock: {event['stock']}")
         time.sleep(5)
 
 if __name__ == "__main__":

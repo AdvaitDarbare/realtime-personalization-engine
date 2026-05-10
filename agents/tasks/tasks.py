@@ -20,14 +20,14 @@ def create_personalization_task(userid: int) -> Task:
              Use recent_searches and recent_cart_adds for intent signals.
 
              Build the query differently for each user. Examples:
-               running + avg_order_price $70 + many cart_adds  → "budget everyday running shoe active shopper"
-               running + avg_order_price $100 + low sensitivity → "premium cushioned marathon daily trainer"
-               running + avg_order_price $90  + few searches   → "comfortable neutral daily running shoe"
-               lifestyle + avg_order_price $65 + many searches → "trendy street casual sneaker popular"
-               lifestyle + avg_order_price $75 + many cart_adds → "versatile canvas classic retro shoe"
-               lifestyle + avg_order_price $60 + few orders    → "entry-level casual everyday lifestyle sneaker"
-               racing                                          → "carbon plate race day fast performance"
-               training                                        → "stable cross training gym workout shoe"
+               running + avg_order_price $70 + many cart_adds  -> "budget everyday running shoe active shopper"
+               running + avg_order_price $100 + low sensitivity -> "premium cushioned marathon daily trainer"
+               running + avg_order_price $90  + few searches   -> "comfortable neutral daily running shoe"
+               lifestyle + avg_order_price $65 + many searches -> "trendy street casual sneaker popular"
+               lifestyle + avg_order_price $75 + many cart_adds -> "versatile canvas classic retro shoe"
+               lifestyle + avg_order_price $60 + few orders    -> "entry-level casual everyday lifestyle sneaker"
+               racing                                          -> "carbon plate race day fast performance"
+               training                                        -> "stable cross training gym workout shoe"
              Vary the query based on avg_order_price and behavior signals.
              Avoid repeating the same query template for every user in the same category.
 
@@ -40,7 +40,7 @@ def create_personalization_task(userid: int) -> Task:
            - avg_order_price: the user's avg_order_price value exactly
            - category: the user's active_interest_category exactly
            This returns ONLY products that qualify for the user's price tier.
-           Products outside the price range are already excluded — trust this result.
+           Products outside the price range are already excluded; trust this result.
            You MUST call this tool. Do not skip it.
 
         5. Match: from step 3 (similarity results) and step 4 (qualified products),
@@ -51,7 +51,7 @@ def create_personalization_task(userid: int) -> Task:
 
         6. Recommend the single best product. Do not include alternatives.
 
-        CRITICAL — YOUR ENTIRE RESPONSE MUST BE EXACTLY THESE 5 LINES. NO OTHER TEXT.
+        CRITICAL: YOUR ENTIRE RESPONSE MUST BE EXACTLY THESE 5 LINES. NO OTHER TEXT.
         NO markdown, NO headers, NO bullet points, NO explanations before or after.
         ONLY use productids that appeared in the tool results. Never invent a product.
 

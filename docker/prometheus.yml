@@ -1,19 +1,7 @@
-# docker/prometheus.yml metrics collector configuration
 global:
   scrape_interval: 15s
 
 scrape_configs:
-  # Business metrics exporter — runs on Mac host, reads from live Kafka topics
-  - job_name: 'shoe_exporter'
+  - job_name: "shoe_exporter"
     static_configs:
-      - targets: ['host.docker.internal:8888']
-
-  # Kafka JMX (infrastructure — kept for reference, currently down)
-  - job_name: 'kafka'
-    static_configs:
-      - targets: ['kafka:9101']
-
-  # Flink metrics (infrastructure — kept for reference, currently down)
-  - job_name: 'flink'
-    static_configs:
-      - targets: ['flink-jobmanager:9249']
+      - targets: ["kafka-exporter:8888"]

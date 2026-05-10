@@ -1,6 +1,6 @@
 from crewai import Crew, Process
-from config.agents import personalization_agent
-from tasks.tasks import create_personalization_task
+from config.agents import merchandising_agent, personalization_agent
+from tasks.tasks import create_merchandising_task, create_personalization_task
 from tools.kafka_tools import build_merchandising_recommendation, write_recommendation
 from observability import new_run_id, set_trace_output, trace_context, trace_span
 

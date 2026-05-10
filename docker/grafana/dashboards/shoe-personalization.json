@@ -1,581 +1,145 @@
 {
-  "title": "Shoe Personalization \u2014 Live Business Metrics",
-  "uid": "shoe-personalization-v1",
-  "schemaVersion": 38,
-  "version": 1,
-  "refresh": "15s",
-  "time": {
-    "from": "now-1h",
-    "to": "now"
-  },
-  "timezone": "browser",
-  "panels": [
-    {
-      "id": 1,
-      "type": "piechart",
-      "title": "User Price Sensitivity Distribution",
-      "description": "How many users fall into each price sensitivity tier (high = budget-conscious, low = premium spenders). Computed by Flink from avg order price.",
-      "gridPos": {
-        "x": 0,
-        "y": 0,
-        "w": 8,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "options": {
-        "pieType": "pie",
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "values": [
-            "value",
-            "percent"
-          ]
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "targets": [
-        {
-          "expr": "shoe_users_total",
-          "legendFormat": "{{price_sensitivity}}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 2,
-      "type": "piechart",
-      "title": "Active Interest Categories",
-      "description": "Users by current 15-minute active interest category from the rolling Flink intent window.",
-      "gridPos": {
-        "x": 8,
-        "y": 0,
-        "w": 16,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "options": {
-        "pieType": "pie",
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "values": [
-            "value",
-            "percent"
-          ]
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "targets": [
-        {
-          "expr": "shoe_users_by_category",
-          "legendFormat": "{{category}}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 3,
-      "type": "stat",
-      "title": "Low Stock Products",
-      "description": "Number of products where Flink has detected stock_trend = 'low' (fewer than 20 units). These need urgent promotion.",
-      "gridPos": {
-        "x": 0,
-        "y": 8,
-        "w": 6,
-        "h": 4
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "orientation": "auto",
-        "textMode": "auto",
-        "colorMode": "background",
-        "graphMode": "none"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 5
-              },
-              {
-                "color": "red",
-                "value": 10
-              }
-            ]
-          },
-          "mappings": [],
-          "unit": "short"
-        }
-      },
-      "targets": [
-        {
-          "expr": "shoe_products_low_stock",
-          "legendFormat": "Low Stock",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 4,
-      "type": "stat",
-      "title": "Products On Sale",
-      "description": "Number of products currently flagged on_sale = true in the live product profile.",
-      "gridPos": {
-        "x": 6,
-        "y": 8,
-        "w": 6,
-        "h": 4
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "orientation": "auto",
-        "textMode": "auto",
-        "colorMode": "background",
-        "graphMode": "none"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "mappings": [],
-          "unit": "short"
-        }
-      },
-      "targets": [
-        {
-          "expr": "shoe_products_on_sale",
-          "legendFormat": "On Sale",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 5,
-      "type": "stat",
-      "title": "Total Recommendations",
-      "description": "Total recommendation events written to the recommendations Kafka topic by the personalization and merchandising agents.",
-      "gridPos": {
-        "x": 12,
-        "y": 8,
-        "w": 6,
-        "h": 4
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "orientation": "auto",
-        "textMode": "auto",
-        "colorMode": "background",
-        "graphMode": "none"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "purple",
-                "value": null
-              }
-            ]
-          },
-          "mappings": [],
-          "unit": "short"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum(shoe_recommendations_total)",
-          "legendFormat": "Total",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 6,
-      "type": "stat",
-      "title": "Avg User Order Price",
-      "description": "Mean average order price across all users with live profiles. Indicates the overall spend level of the active user base.",
-      "gridPos": {
-        "x": 18,
-        "y": 8,
-        "w": 6,
-        "h": 4
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "orientation": "auto",
-        "textMode": "auto",
-        "colorMode": "value",
-        "graphMode": "none"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "mappings": [],
-          "unit": "currencyUSD",
-          "decimals": 2
-        }
-      },
-      "targets": [
-        {
-          "expr": "shoe_avg_order_price",
-          "legendFormat": "Avg Order Price",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 7,
-      "type": "table",
-      "title": "Product Demand Scores",
-      "description": "Current demand score per product, sorted high to low. Demand score is total orders divided by 100.",
-      "gridPos": {
-        "x": 0,
-        "y": 12,
-        "w": 12,
-        "h": 10
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "inspect": false
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Time"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "productid"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Product ID"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Product"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Demand"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "showHeader": true,
-        "cellHeight": "sm",
-        "sortBy": [
-          {
-            "desc": true,
-            "displayName": "Value"
-          }
-        ]
-      },
-      "targets": [
-        {
-          "expr": "sort_desc(shoe_product_demand_score)",
-          "legendFormat": "{{name}}",
-          "refId": "A",
-          "format": "table",
-          "instant": true
-        }
-      ]
-    },
-    {
-      "id": 8,
-      "type": "table",
-      "title": "Product Stock Levels",
-      "description": "Current stock units per product, sorted low to high so urgent products rise to the top.",
-      "gridPos": {
-        "x": 12,
-        "y": 12,
-        "w": 12,
-        "h": 10
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "inspect": false
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Time"
-            },
-            "properties": [
-              {
-                "id": "custom.hidden",
-                "value": true
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "productid"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Product ID"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "name"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Product"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Stock"
-              },
-              {
-                "id": "unit",
-                "value": "short"
-              },
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "red",
-                      "value": null
-                    },
-                    {
-                      "color": "yellow",
-                      "value": 20
-                    },
-                    {
-                      "color": "green",
-                      "value": 50
-                    }
-                  ]
-                }
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-background"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "showHeader": true,
-        "cellHeight": "sm",
-        "sortBy": [
-          {
-            "desc": false,
-            "displayName": "Value"
-          }
-        ]
-      },
-      "targets": [
-        {
-          "expr": "sort(shoe_product_stock)",
-          "legendFormat": "{{name}}",
-          "refId": "A",
-          "format": "table",
-          "instant": true
-        }
-      ]
-    },
-    {
-      "id": 9,
-      "type": "piechart",
-      "title": "Recommendations by Agent Type",
-      "description": "Recommendation events written to Kafka by each agent type.",
-      "gridPos": {
-        "x": 0,
-        "y": 22,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "options": {
-        "pieType": "donut",
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "values": [
-            "value",
-            "percent"
-          ]
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "targets": [
-        {
-          "expr": "shoe_recommendations_total",
-          "legendFormat": "{{agent_type}}",
-          "refId": "A"
-        }
-      ]
-    }
-  ],
-  "templating": {
+  "annotations": {
     "list": [
       {
-        "name": "datasource",
-        "type": "datasource",
-        "pluginId": "prometheus",
-        "label": "Data Source",
-        "hide": 0,
-        "refresh": 1,
-        "query": "prometheus"
+        "builtIn": 1,
+        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "target": {"limit": 100, "matchAny": false, "tags": [], "type": "dashboard"},
+        "type": "dashboard"
       }
     ]
-  }
+  },
+  "editable": true,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "decimals": 0, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "Prometheus"}, "expr": "shoe_valid_user_profiles_total{instance=\"kafka-exporter:8888\"}", "instant": true, "refId": "A"}],
+      "title": "Valid User Profiles",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "decimals": 0, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 0},
+      "id": 2,
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "Prometheus"}, "expr": "shoe_live_products_total{instance=\"kafka-exporter:8888\"}", "instant": true, "refId": "A"}],
+      "title": "Product Profiles",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "decimals": 0, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "orange", "value": null}]}}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 0},
+      "id": 3,
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "Prometheus"}, "expr": "shoe_low_stock_products_total{instance=\"kafka-exporter:8888\"}", "instant": true, "refId": "A"}],
+      "title": "Low Stock",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "decimals": 0, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 0},
+      "id": 4,
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "Prometheus"}, "expr": "sum(shoe_recommendations_total{instance=\"kafka-exporter:8888\"})", "instant": true, "refId": "A"}],
+      "title": "Recommendations",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "decimals": 2, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}, "unit": "currencyUSD"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 0},
+      "id": 5,
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "Prometheus"}, "expr": "shoe_avg_order_price_all{instance=\"kafka-exporter:8888\"}", "instant": true, "refId": "A"}],
+      "title": "Avg User Spend",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "decimals": 2, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}, "unit": "currencyUSD"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 4, "x": 20, "y": 0},
+      "id": 6,
+      "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "Prometheus"}, "expr": "shoe_avg_effective_product_price{instance=\"kafka-exporter:8888\"}", "instant": true, "refId": "A"}],
+      "title": "Avg Product Price",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "decimals": 0, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 4},
+      "id": 7,
+      "options": {"displayMode": "gradient", "maxVizHeight": 300, "minVizHeight": 10, "minVizWidth": 0, "namePlacement": "auto", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showUnfilled": true, "valueMode": "color"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "Prometheus"}, "expr": "shoe_users_by_price_sensitivity{instance=\"kafka-exporter:8888\"}", "instant": true, "legendFormat": "{{price_sensitivity}}", "refId": "A"}],
+      "title": "Users by Price Sensitivity",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "decimals": 0, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 8, "y": 4},
+      "id": 8,
+      "options": {"displayMode": "gradient", "maxVizHeight": 300, "minVizHeight": 10, "minVizWidth": 0, "namePlacement": "auto", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showUnfilled": true, "valueMode": "color"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "Prometheus"}, "expr": "shoe_users_by_active_category{instance=\"kafka-exporter:8888\"}", "instant": true, "legendFormat": "{{category}}", "refId": "A"}],
+      "title": "Users by Active Category",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "decimals": 2, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}, "unit": "currencyUSD"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 16, "y": 4},
+      "id": 9,
+      "options": {"displayMode": "gradient", "maxVizHeight": 300, "minVizHeight": 10, "minVizWidth": 0, "namePlacement": "auto", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showUnfilled": false, "valueMode": "color"},
+      "targets": [{"datasource": {"type": "prometheus", "uid": "Prometheus"}, "expr": "topk(10, shoe_product_effective_price{instance=\"kafka-exporter:8888\"})", "instant": true, "legendFormat": "{{productid}} {{name}}", "refId": "A"}],
+      "title": "Top Product Prices",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "fieldConfig": {"defaults": {"custom": {"align": "auto", "cellOptions": {"type": "auto"}, "inspect": false}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 11},
+      "id": 10,
+      "options": {"cellHeight": "sm", "footer": {"countRows": false, "fields": "", "reducer": ["sum"], "show": false}, "showHeader": true},
+      "pluginVersion": "10.2.0",
+      "targets": [{"datasource": {"type": "prometheus", "uid": "Prometheus"}, "expr": "topk(12, shoe_user_profile_info{instance=\"kafka-exporter:8888\"})", "format": "table", "instant": true, "refId": "A"}],
+      "title": "Individual User Context",
+      "type": "table"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "fieldConfig": {"defaults": {"custom": {"align": "auto", "cellOptions": {"type": "auto"}, "inspect": false}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 11},
+      "id": 11,
+      "options": {"cellHeight": "sm", "footer": {"countRows": false, "fields": "", "reducer": ["sum"], "show": false}, "showHeader": true},
+      "pluginVersion": "10.2.0",
+      "targets": [{"datasource": {"type": "prometheus", "uid": "Prometheus"}, "expr": "topk(12, shoe_product_profile_info{instance=\"kafka-exporter:8888\"})", "format": "table", "instant": true, "refId": "A"}],
+      "title": "Product Pricing and Stock Context",
+      "type": "table"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["kafka", "flink", "crewai"],
+  "templating": {"list": []},
+  "time": {"from": "now-30m", "to": "now"},
+  "timepicker": {},
+  "timezone": "",
+  "title": "Shoe Personalization Learning Dashboard",
+  "uid": "shoe-personalization",
+  "version": 2,
+  "weekStart": ""
 }

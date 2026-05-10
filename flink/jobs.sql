@@ -2,7 +2,7 @@
 -- Kafka partitions or a quiet partition.
 SET 'table.exec.source.idle-timeout' = '5 s';
 
--- ─── SOURCE TABLES ───
+-- SOURCE TABLES
 
 CREATE TABLE clickstream (
     event_id VARCHAR,
@@ -77,7 +77,7 @@ CREATE TABLE product_metadata (
     'format' = 'json'
 );
 
--- ─── SINK TABLES ───
+-- SINK TABLES
 
 CREATE TABLE live_user_profile (
     userid INT,
@@ -125,7 +125,7 @@ CREATE TABLE live_product_profile (
     'value.format' = 'json'
 );
 
--- ─── VIEWS ───
+-- VIEWS
 
 CREATE VIEW user_pageviews AS
 SELECT
@@ -206,16 +206,11 @@ GROUP BY userid;
 CREATE VIEW product_orders AS
 SELECT
     productid,
-    COUNT(*) AS total_orders,
-    CASE
-        WHEN COUNT(*) > 10 THEN 'high'
-        WHEN COUNT(*) > 5  THEN 'medium'
-        ELSE 'low'
-    END AS demand_score
+    COUNT(*) AS total_orders
 FROM cart_updates
 GROUP BY productid;
 
--- ─── FLINK JOBS ───
+-- FLINK JOBS
 
 INSERT INTO live_user_profile
 SELECT

@@ -1,12 +1,28 @@
 import json
+import os
 import random
 import time
 import uuid
 from kafka import KafkaProducer
 
 
+def load_env_file():
+    env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
+    if not os.path.exists(env_path):
+        return
+    with open(env_path, "r", encoding="utf-8") as env_file:
+        for line in env_file:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or "=" not in stripped:
+                continue
+            key, value = stripped.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+load_env_file()
+
 producer = KafkaProducer(
-    bootstrap_servers="localhost:9092",
+    bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
     value_serializer=lambda v: json.dumps(v).encode("utf-8"),
     key_serializer=lambda k: str(k).encode("utf-8")
 )

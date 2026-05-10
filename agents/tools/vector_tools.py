@@ -1,19 +1,21 @@
 import json
+import os
 import time
 import chromadb
 from kafka import KafkaConsumer
 from crewai.tools import tool
 from observability import trace_span
 
-# Module-level cache — collection is built once per process on first tool call
+# Module-level cache: collection is built once per process on first tool call
 _collection = None
+BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 
 
 def _read_inventory() -> dict:
     """Read latest inventory record per product to get category + price tier."""
     consumer = KafkaConsumer(
         'inventory',
-        bootstrap_servers='localhost:9092',
+        bootstrap_servers=BOOTSTRAP_SERVERS,
         value_deserializer=lambda m: json.loads(m.decode('utf-8')) if m else None,
         auto_offset_reset='earliest',
         enable_auto_commit=False,
@@ -48,7 +50,7 @@ def _build_collection() -> chromadb.Collection:
     # Read product metadata (descriptions, attributes)
     meta_consumer = KafkaConsumer(
         'product-metadata',
-        bootstrap_servers='localhost:9092',
+        bootstrap_servers=BOOTSTRAP_SERVERS,
         value_deserializer=lambda m: json.loads(m.decode('utf-8')) if m else None,
         auto_offset_reset='earliest',
         enable_auto_commit=False,
@@ -69,7 +71,7 @@ def _build_collection() -> chromadb.Collection:
     except Exception:
         pass
 
-    # Fix 1: cosine distance — correct metric for sentence embeddings
+    # Cosine distance is the right metric for sentence embeddings.
     collection = client.create_collection(
         "products",
         metadata={"hnsw:space": "cosine"},
@@ -148,7 +150,7 @@ def find_similar_products(query: str, category: str = "") -> str:
                     "premium carbon racing flat fast"
                     "budget retro lifestyle sneaker affordable"
                     "stable supportive trail running shoe"
-                  Avoid bare "running shoe" or "lifestyle shoe" — too generic.
+                  Avoid bare "running shoe" or "lifestyle shoe"; too generic.
 
         category: (optional) Filter to a single category before ranking.
                   Pass the user's active_interest_category exactly as returned
@@ -162,7 +164,7 @@ def find_similar_products(query: str, category: str = "") -> str:
     t0 = time.time()
     collection = _get_collection()
     if collection.count() == 0:
-        return "Product index is empty — no product metadata found in Kafka."
+        return "Product index is empty; no product metadata found in Kafka."
 
     # Fix 3: apply category pre-filter when provided
     where = {"category": {"$eq": category}} if category else None

@@ -1,6 +1,29 @@
 import time
 import json
+import os
+from pathlib import Path
 from kafka import KafkaConsumer
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def load_env_file():
+    env_path = ROOT / ".env"
+    if not env_path.exists():
+        return
+
+    for line in env_path.read_text().splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+load_env_file()
+BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+
 from crew import run_personalization, run_merchandising
 
 def watch_for_updates():
@@ -11,7 +34,7 @@ def watch_for_updates():
     
     consumer = KafkaConsumer(
         'live-user-profile',
-        bootstrap_servers='localhost:9092',
+        bootstrap_servers=BOOTSTRAP_SERVERS,
         value_deserializer=lambda m: json.loads(m.decode('utf-8')),
         auto_offset_reset='latest',  # only new updates
         enable_auto_commit=True,

@@ -1,10 +1,27 @@
 import json
+import os
 import time
 import random
 from kafka import KafkaProducer
 
+
+def load_env_file():
+    env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
+    if not os.path.exists(env_path):
+        return
+    with open(env_path, "r", encoding="utf-8") as env_file:
+        for line in env_file:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or "=" not in stripped:
+                continue
+            key, value = stripped.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+load_env_file()
+
 producer = KafkaProducer(
-    bootstrap_servers='localhost:9092',
+    bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
     value_serializer=lambda v: json.dumps(v).encode('utf-8'),
     key_serializer=lambda k: str(k).encode('utf-8')
 )
@@ -35,7 +52,7 @@ PRODUCT_PRICES = {
     "PU-002": 69.99, "PU-003": 109.99, "VN-001": 54.99
 }
 
-# User IDs matching Datagen clickstream (1-100)
+# User IDs shared with the clickstream producer (1-100)
 USER_IDS = list(range(1, 101))
 
 # Some users prefer cheaper shoes (price sensitive)
@@ -88,7 +105,7 @@ def send_cart_events():
             value=event
         )
 
-        print(f"Order: user {event['userid']} → {event['productid']} ${event['price']} ({event['action']})")
+        print(f"Order: user {event['userid']} -> {event['productid']} ${event['price']} ({event['action']})")
         time.sleep(random.uniform(0.5, 2.0))
 
 if __name__ == "__main__":
