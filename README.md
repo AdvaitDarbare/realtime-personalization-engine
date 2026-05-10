@@ -29,7 +29,9 @@ This repo keeps that same shape, but narrows the domain to shoes so the project 
 
 ## Architecture
 
-The editable architecture diagram is an Excalidraw file: [docs/architecture.excalidraw](docs/architecture.excalidraw).
+![Real-time shoe personalization architecture](docs/architecture.svg)
+
+The rendered diagram above is available as [docs/architecture.svg](docs/architecture.svg). The editable architecture source is [docs/architecture.excalidraw](docs/architecture.excalidraw).
 
 The flow is intentionally close to the reference picture:
 
@@ -71,7 +73,8 @@ clickstream/cart/inventory events
 |   |-- tasks/tasks.py           # CrewAI task prompts
 |   `-- tools/                   # Kafka and vector-search tools
 |-- docker/docker-compose.yml    # Kafka, topic init, Redpanda Console, Flink
-|-- docs/architecture.excalidraw # Editable Excalidraw architecture diagram
+|-- docs/architecture.svg       # Rendered architecture diagram for GitHub
+|-- docs/architecture.excalidraw # Editable Excalidraw source
 |-- flink/jobs.sql               # Streaming SQL jobs
 |-- monitoring/kafka_exporter.py # Optional Grafana/Prometheus metrics exporter
 |-- producers/                   # Event generators
