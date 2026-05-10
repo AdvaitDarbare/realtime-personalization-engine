@@ -1,5 +1,6 @@
 import contextlib
 import json
+import os
 import time
 import uuid
 from typing import Any
@@ -28,6 +29,10 @@ def trace_context(
     input: Any | None = None,
 ):
     """Tiny local trace hook used by the demo without adding another service."""
+    if os.getenv("DISABLE_LOCAL_TRACE", "").lower() == "true":
+        yield None
+        return
+
     started = time.time()
     print(f"[trace] start {name} run_id={run_id} user_id={user_id}")
     try:
@@ -52,6 +57,9 @@ def trace_span(
     metadata: dict[str, Any] | None = None,
     start_time: float | None = None,
 ):
+    if os.getenv("DISABLE_LOCAL_TRACE", "").lower() == "true":
+        return
+
     elapsed_ms = round((time.time() - (start_time or time.time())) * 1000, 2)
     print(
         f"[span] {name} elapsed_ms={elapsed_ms} "

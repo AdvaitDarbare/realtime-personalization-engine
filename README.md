@@ -29,22 +29,18 @@ This repo keeps that same shape, but narrows the domain to shoes so the project 
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    C[Clickstream producer] --> K[Kafka topics]
-    A[Cart producer] --> K
-    I[Inventory producer] --> K
-    M[Metadata producer] --> K
+The editable architecture diagram is an Excalidraw file: [docs/architecture.excalidraw](docs/architecture.excalidraw).
 
-    K --> F[Flink SQL jobs]
-    F --> U[live-user-profile]
-    F --> P[live-product-profile]
+The flow is intentionally close to the reference picture:
 
-    M --> V[ChromaDB product index]
-    U --> R[CrewAI personalization agent]
-    P --> R
-    V --> R
-    R --> O[recommendations topic]
+```text
+clickstream/cart/inventory events
+        -> Kafka
+        -> Flink SQL
+        -> live user and product profiles
+        -> optional MCP context server
+        -> CrewAI + OpenAI agents
+        -> recommendations topic and Grafana dashboard
 ```
 
 ## What Each Layer Does
@@ -60,6 +56,8 @@ flowchart LR
 
 **CrewAI** is the AI layer. The personalization agent uses tools to read the live Kafka profiles, search similar products, filter by price sensitivity in code, and produce one recommendation.
 
+**MCP** is an optional context bridge. `agents/mcp_server.py` exposes the same live context through simple MCP tools, so another agent or desktop client can ask for user/product context without knowing the Kafka topic names.
+
 ## Repository Structure
 
 ```text
@@ -67,11 +65,13 @@ flowchart LR
 |-- agents/
 |   |-- main.py                  # Watches live user profiles and triggers recommendations
 |   |-- crew.py                  # CrewAI runner functions
+|   |-- mcp_server.py            # Optional MCP bridge over live context tools
 |   |-- smoke_test.py            # Local health check script
 |   |-- config/agents.py         # OpenAI LLM and agent definitions
 |   |-- tasks/tasks.py           # CrewAI task prompts
 |   `-- tools/                   # Kafka and vector-search tools
 |-- docker/docker-compose.yml    # Kafka, topic init, Redpanda Console, Flink
+|-- docs/architecture.excalidraw # Editable Excalidraw architecture diagram
 |-- flink/jobs.sql               # Streaming SQL jobs
 |-- monitoring/kafka_exporter.py # Optional Grafana/Prometheus metrics exporter
 |-- producers/                   # Event generators
@@ -131,12 +131,18 @@ Check the containers:
 docker compose -f docker/docker-compose.yml ps
 ```
 
-Expected services:
+Expected core services:
 
 - `kafka`
 - `redpanda-console`
 - `flink-jobmanager`
 - `flink-taskmanager`
+
+Expected dashboard services:
+
+- `kafka-exporter`
+- `prometheus`
+- `grafana`
 
 `kafka-init` should exit successfully after creating the topics.
 
@@ -208,6 +214,33 @@ Stock: 37 units, medium trend
 ```
 
 The recommendation is also written to the `recommendations` Kafka topic.
+
+### 6. Optional: Run the MCP Context Server
+
+This is a thin access layer over the same Kafka/Flink context used by CrewAI. It keeps the project aligned with the reference diagram without adding another database or service.
+
+For local MCP clients that launch a server over stdio:
+
+```bash
+source .venv/bin/activate
+python agents/mcp_server.py
+```
+
+Available MCP tools:
+
+- `get_live_user_profile(userid)`
+- `get_live_product_profile(productid)`
+- `get_live_product_catalog()`
+- `get_price_qualified_catalog(price_sensitivity, avg_order_price, category)`
+- `search_similar_products(query, category)`
+- `publish_recommendation(userid, recommendation, agent_type)`
+
+For experimentation over HTTP:
+
+```bash
+source .venv/bin/activate
+python agents/mcp_server.py --transport streamable-http --port 8000
+```
 
 ## Useful Local URLs
 

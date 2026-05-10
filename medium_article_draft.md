@@ -8,6 +8,8 @@ The idea came from a real-time personalization architecture diagram. The diagram
 
 That pattern felt useful, but also a little abstract. So I turned it into a shoe store demo.
 
+I also kept the project diagram in Excalidraw so it matches the hand-drawn feel of the original architecture sketch instead of turning into a heavy enterprise diagram.
+
 ## The Basic Idea
 
 The project simulates a shoe retailer.
@@ -80,8 +82,11 @@ That sounds bigger than it is here. In this demo, the context platform is basica
 - Flink jobs creating live user and product profiles
 - a small vector index for product metadata
 - CrewAI tools that read the live context
+- an optional MCP server that exposes the same context through standard tools
 
 The useful idea is that the agent is not working from memory, a static CSV file, or a nightly batch job. It is working from profiles that update as events arrive.
+
+I kept MCP intentionally small. It does not replace Kafka or Flink. It just gives clients tools like `get_live_user_profile`, `get_live_product_catalog`, and `search_similar_products` so they do not need to know the internal topic names.
 
 ## The End-to-End Flow
 
@@ -124,7 +129,7 @@ If I keep building this, I would add a small UI that shows live user profiles an
 
 I would also add schema validation for events, because right now the project relies on the producers and Flink SQL staying aligned.
 
-Another useful improvement would be a simple MCP server around the context tools. That would make the live profiles available to other agents or clients in a more standard way.
+Another useful improvement would be connecting the MCP server to a small UI or another agent client. Right now it is mainly a clean access layer around the live context tools.
 
 But for now, the project does what I wanted it to do: it shows how Kafka, Flink, and CrewAI can work together in a small real-time personalization pipeline.
 
