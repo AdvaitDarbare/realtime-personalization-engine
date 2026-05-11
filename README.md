@@ -29,21 +29,64 @@ This repo keeps that same shape, but narrows the domain to shoes so the project 
 
 ## Architecture
 
-![Real-time shoe personalization architecture](docs/architecture.svg)
+The diagram below is intentionally close to the reference picture, but scoped to this learning project.
 
-The rendered diagram above is available as [docs/architecture.svg](docs/architecture.svg). The editable architecture source is [docs/architecture.excalidraw](docs/architecture.excalidraw).
+```mermaid
+flowchart LR
+    subgraph producers["Python producers"]
+        clickstream["shoe-clickstream events"]
+        cart["cart-updates"]
+        inventory["inventory"]
+        metadata["product-metadata"]
+    end
 
-The flow is intentionally close to the reference picture:
+    subgraph kafka["Kafka"]
+        raw["raw event topics"]
+        userTopic["live-user-profile"]
+        productTopic["live-product-profile"]
+        recTopic["recommendations"]
+    end
 
-```text
-clickstream/cart/inventory events
-        -> Kafka
-        -> Flink SQL
-        -> live user and product profiles
-        -> optional MCP context server
-        -> CrewAI + OpenAI agents
-        -> recommendations topic and Grafana dashboard
+    flink["Flink SQL jobs<br/>build live context"]
+    chroma["ChromaDB<br/>product similarity search"]
+    mcp["Optional MCP server<br/>context tools"]
+
+    subgraph agents["CrewAI + OpenAI agents"]
+        personalization["Personalization agent"]
+        merchandising["Merchandising agent"]
+    end
+
+    monitoring["kafka_exporter<br/>Prometheus<br/>Grafana dashboard"]
+
+    clickstream --> raw
+    cart --> raw
+    inventory --> raw
+    metadata --> raw
+
+    raw --> flink
+    flink --> userTopic
+    flink --> productTopic
+    metadata -.-> chroma
+
+    userTopic --> mcp
+    productTopic --> mcp
+    userTopic --> personalization
+    productTopic --> personalization
+    productTopic --> merchandising
+    chroma --> personalization
+    mcp -. optional context access .-> personalization
+    mcp -. optional context access .-> merchandising
+
+    personalization --> recTopic
+    merchandising --> recTopic
+
+    raw -. metrics .-> monitoring
+    userTopic -. metrics .-> monitoring
+    productTopic -. metrics .-> monitoring
+    recTopic -. metrics .-> monitoring
 ```
+
+The editable architecture source is [docs/architecture.excalidraw](docs/architecture.excalidraw).
 
 ## What Each Layer Does
 
@@ -73,8 +116,7 @@ clickstream/cart/inventory events
 |   |-- tasks/tasks.py           # CrewAI task prompts
 |   `-- tools/                   # Kafka and vector-search tools
 |-- docker/docker-compose.yml    # Kafka, topic init, Redpanda Console, Flink
-|-- docs/architecture.svg       # Rendered architecture diagram for GitHub
-|-- docs/architecture.excalidraw # Editable Excalidraw source
+|-- docs/architecture.excalidraw # Editable Excalidraw architecture diagram
 |-- flink/jobs.sql               # Streaming SQL jobs
 |-- monitoring/kafka_exporter.py # Optional Grafana/Prometheus metrics exporter
 |-- producers/                   # Event generators
