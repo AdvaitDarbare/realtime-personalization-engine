@@ -86,7 +86,7 @@ flowchart LR
     recTopic -. metrics .-> monitoring
 ```
 
-The editable architecture source is [docs/architecture.excalidraw](docs/architecture.excalidraw).
+The diagram is kept in the README as Mermaid so it renders directly on GitHub.
 
 ## What Each Layer Does
 
@@ -116,7 +116,6 @@ The editable architecture source is [docs/architecture.excalidraw](docs/architec
 |   |-- tasks/tasks.py           # CrewAI task prompts
 |   `-- tools/                   # Kafka and vector-search tools
 |-- docker/docker-compose.yml    # Kafka, topic init, Redpanda Console, Flink
-|-- docs/architecture.excalidraw # Editable Excalidraw architecture diagram
 |-- flink/jobs.sql               # Streaming SQL jobs
 |-- monitoring/kafka_exporter.py # Optional Grafana/Prometheus metrics exporter
 |-- producers/                   # Event generators

@@ -8,7 +8,7 @@ The idea came from a real-time personalization architecture diagram. The diagram
 
 That pattern felt useful, but also a little abstract. So I turned it into a shoe store demo.
 
-I also kept the project diagram in Excalidraw so it matches the hand-drawn feel of the original architecture sketch instead of turning into a heavy enterprise diagram.
+I kept the architecture diagram simple in the README so it is easy to understand and renders directly on GitHub.
 
 ## The Basic Idea
 
