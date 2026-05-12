@@ -1,19 +1,18 @@
-from crewai import Task
-from config.agents import personalization_agent, merchandising_agent
+from crewai import Agent, Task
 
 
-def create_personalization_task(userid: int) -> Task:
+def create_personalization_task(userid: int, agent: Agent) -> Task:
     return Task(
         description=f"""Analyze the live profile for user {userid} and recommend
         the best shoe for them right now.
 
         Steps:
-        1. Get user {userid}'s live profile using the Get Live User Profile tool.
+        1. Call get_live_user_profile with userid={userid} to get their live profile.
 
         2. Note their active_interest_category, recent_searches, recent_cart_adds,
            price_sensitivity, total_orders, and avg_order_price.
 
-        3. Call Find Similar Products with TWO arguments:
+        3. Call search_similar_products with TWO arguments:
            - query: a rich 4-8 word description built from MULTIPLE user signals.
              Combine adjectives from: category + price tier + behavior signals below.
              Use avg_order_price for precise price signals, not just high/medium/low.
@@ -35,7 +34,7 @@ def create_personalization_task(userid: int) -> Task:
              (e.g. "running", "lifestyle", "racing", "training", "football", "hiking").
              This pre-filters results to the right category before ranking.
 
-        4. Call Get Price Qualified Products with THREE arguments:
+        4. Call get_price_qualified_catalog with THREE arguments:
            - price_sensitivity: the user's price_sensitivity value exactly
            - avg_order_price: the user's avg_order_price value exactly
            - category: the user's active_interest_category exactly
@@ -66,22 +65,22 @@ def create_personalization_task(userid: int) -> Task:
         Live signal: <signal>
         Why this user: <one sentence>
         Stock: <n> units, <trend> trend""",
-        agent=personalization_agent
+        agent=agent,
     )
 
 
-def create_merchandising_task() -> Task:
+def create_merchandising_task(agent: Agent) -> Task:
     return Task(
-        description="""Analyze all live product profiles and identify the top 3 
+        description="""Analyze all live product profiles and identify the top 3
         products that need promotion right now.
-        
+
         Steps:
-        1. Get all product profiles using Get All Products tool
+        1. Get all product profiles using get_live_product_catalog tool.
         2. Look for products with stock_trend = "low" (urgent)
         3. Look for products where on_sale = true (needs visibility)
         4. Look for products with highest demand_score
         5. Rank top 3 by promotion urgency
-        
+
         For each product provide:
         - Product name and ID
         - Why it needs promotion right now
@@ -92,5 +91,5 @@ def create_merchandising_task() -> Task:
         - Reason for promotion
         - Recommended channel
         - Expected impact""",
-        agent=merchandising_agent
+        agent=agent,
     )

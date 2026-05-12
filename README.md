@@ -49,7 +49,7 @@ flowchart LR
 
     flink["Flink SQL jobs<br/>build live context"]
     chroma["ChromaDB<br/>product similarity search"]
-    mcp["Optional MCP server<br/>context tools"]
+    mcp["MCP server<br/>context tools"]
 
     subgraph agents["CrewAI + OpenAI agents"]
         personalization["Personalization agent"]
@@ -70,12 +70,10 @@ flowchart LR
 
     userTopic --> mcp
     productTopic --> mcp
-    userTopic --> personalization
-    productTopic --> personalization
-    productTopic --> merchandising
-    chroma --> personalization
-    mcp -. optional context access .-> personalization
-    mcp -. optional context access .-> merchandising
+    chroma --> mcp
+
+    mcp --> personalization
+    mcp --> merchandising
 
     personalization --> recTopic
     merchandising --> recTopic
@@ -99,9 +97,9 @@ The diagram is kept in the README as Mermaid so it renders directly on GitHub.
 
 **ChromaDB** is a tiny local semantic product index. It reads product metadata from Kafka and lets the agent search for products using text like `budget everyday running shoe`.
 
-**CrewAI** is the AI layer. The personalization agent uses tools to read the live Kafka profiles, search similar products, filter by price sensitivity in code, and produce one recommendation.
+**MCP** is the context serving layer between live profiles and agents. `agents/mcp_server.py` exposes the live Kafka profiles and ChromaDB search through named tools (`get_live_user_profile`, `get_price_qualified_catalog`, `search_similar_products`, `get_live_product_catalog`). Agents call these tools through CrewAI's `MCPServerAdapter` and never touch Kafka or ChromaDB directly.
 
-**MCP** is an optional context bridge. `agents/mcp_server.py` exposes the same live context through simple MCP tools, so another agent or desktop client can ask for user/product context without knowing the Kafka topic names.
+**CrewAI** is the AI layer. The personalization agent calls MCP tools to read live user context, search similar products, and filter by price sensitivity, then produces one recommendation.
 
 ## Repository Structure
 
@@ -110,7 +108,7 @@ The diagram is kept in the README as Mermaid so it renders directly on GitHub.
 |-- agents/
 |   |-- main.py                  # Watches live user profiles and triggers recommendations
 |   |-- crew.py                  # CrewAI runner functions
-|   |-- mcp_server.py            # Optional MCP bridge over live context tools
+|   |-- mcp_server.py            # MCP server — primary context layer for agents
 |   |-- smoke_test.py            # Local health check script
 |   |-- config/agents.py         # OpenAI LLM and agent definitions
 |   |-- tasks/tasks.py           # CrewAI task prompts
