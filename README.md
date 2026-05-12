@@ -33,88 +33,41 @@ The diagram below is intentionally close to the reference picture, but scoped to
 
 ```mermaid
 flowchart LR
-    subgraph sources["Event Sources"]
-        cs["Clickstream Events"]
-        cu["Cart Events"]
-        inv["Inventory Events"]
-        meta["Product Metadata"]
-    end
+    user["User Events"]
+    product["Product Events"]
+    kafkaRaw[("Kafka\nRaw Topics")]
+    flink["Flink"]
+    profiles["Live Profiles"]
+    mcp["MCP Context"]
+    chroma["ChromaDB"]
+    agents["Agents"]
+    kafkaRec[("Kafka\nRecommendations")]
+    grafana["Grafana"]
 
-    subgraph rawkafka["Kafka — Raw Topics"]
-        direction TB
-        t1[("shoe-clickstream")]
-        t2[("cart-updates")]
-        t3[("inventory")]
-        t4[("product-metadata")]
-    end
+    user --> kafkaRaw
+    product --> kafkaRaw
+    kafkaRaw --> flink
+    flink --> profiles
+    profiles --> mcp
+    kafkaRaw --> chroma
+    chroma --> mcp
+    mcp --> agents
+    agents --> kafkaRec
+    kafkaRec --> grafana
 
-    subgraph flink["Flink SQL"]
-        direction TB
-        fu["User Features\nactive category · price sensitivity"]
-        fp["Product Features\nstock trend · demand score"]
-    end
+    classDef source fill:#f8f9fa,stroke:#495057,color:#212529
+    classDef kafka fill:#2f9e44,stroke:#2f9e44,color:#fff
+    classDef process fill:#e8590c,stroke:#c94e16,color:#fff
+    classDef context fill:#1971c2,stroke:#1864ab,color:#fff
+    classDef agent fill:#7048e8,stroke:#5f3dc4,color:#fff
+    classDef monitor fill:#f1f3f5,stroke:#868e96,color:#343a40
 
-    subgraph liveprofiles["Live Profiles"]
-        direction TB
-        up[("User Profile")]
-        pp[("Product Profile")]
-    end
-
-    subgraph context["Context Layer"]
-        direction TB
-        chroma["Product Similarity Search"]
-        mcp["MCP Server\n(optional)"]
-    end
-
-    subgraph agents["CrewAI Agents"]
-        direction TB
-        pa["Personalization Agent"]
-        ma["Merchandising Agent"]
-    end
-
-    subgraph outmon["Output & Monitoring"]
-        direction TB
-        rec[("Recommendations Topic")]
-        mon["Prometheus / Grafana"]
-    end
-
-    cs --> t1
-    cu --> t2
-    inv --> t3
-    meta --> t4
-
-    t1 & t2 --> fu
-    t3 & t4 --> fp
-    t4 -.-> chroma
-
-    fu --> up
-    fp --> pp
-
-    up & pp --> pa
-    pp --> ma
-    chroma --> pa
-
-    mcp -.-> pa
-    mcp -.-> ma
-
-    pa & ma --> rec
-    rec -.-> mon
-
-    classDef topic    fill:#2f9e44,stroke:#2f9e44,color:#fff
-    classDef processor fill:#e8590c,stroke:#c94e16,color:#fff
-    classDef profile  fill:#1971c2,stroke:#1864ab,color:#fff
-    classDef agent    fill:#f8f9fa,stroke:#343a40,color:#212529
-    classDef recnode  fill:#e67700,stroke:#d16300,color:#fff
-    classDef metrics  fill:#f1f3f5,stroke:#adb5bd,color:#495057
-    classDef ctx      fill:#7048e8,stroke:#5f3dc4,color:#fff
-
-    class t1,t2,t3,t4 topic
-    class fu,fp processor
-    class up,pp profile
-    class pa,ma agent
-    class rec recnode
-    class mon metrics
-    class chroma,mcp ctx
+    class user,product source
+    class kafkaRaw,kafkaRec kafka
+    class flink process
+    class profiles,mcp,chroma context
+    class agents agent
+    class grafana monitor
 ```
 
 The diagram is kept in the README as Mermaid so it renders directly on GitHub.
