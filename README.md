@@ -33,57 +33,80 @@ The diagram below is intentionally close to the reference picture, but scoped to
 
 ```mermaid
 flowchart LR
-    subgraph producers["Python producers"]
-        clickstream["shoe-clickstream events"]
-        cart["cart-updates"]
-        inventory["inventory"]
-        metadata["product-metadata"]
+    subgraph events["Events"]
+        cs["shoe-clickstream\n(search, view, add-to-cart)"]
+        cu["cart-updates\n(purchase, return)"]
+        inv["inventory\n(stock, price, sale)"]
+        meta["product-metadata\n(name, description, rating)"]
     end
 
-    subgraph kafka["Kafka"]
-        raw["raw event topics"]
-        userTopic["live-user-profile"]
-        productTopic["live-product-profile"]
-        recTopic["recommendations"]
+    subgraph kafka["Kafka — raw topics"]
+        direction TB
+        t1[("shoe-clickstream")]
+        t2[("cart-updates")]
+        t3[("inventory")]
+        t4[("product-metadata")]
     end
 
-    flink["Flink SQL jobs<br/>build live context"]
-    chroma["ChromaDB<br/>product similarity search"]
-    mcp["Optional MCP server<br/>context tools"]
-
-    subgraph agents["CrewAI + OpenAI agents"]
-        personalization["Personalization agent"]
-        merchandising["Merchandising agent"]
+    subgraph flink["Flink SQL — streaming features"]
+        direction TB
+        f1["active interest category\nrecent searches · cart adds"]
+        f2["price sensitivity\navg order price · order history"]
+        f3["stock trend · demand score\nsale status · avg rating"]
     end
 
-    monitoring["kafka_exporter<br/>Prometheus<br/>Grafana dashboard"]
+    subgraph profiles["Live Profiles — compacted Kafka topics"]
+        direction TB
+        up[("live-user-profile")]
+        pp[("live-product-profile")]
+    end
 
-    clickstream --> raw
-    cart --> raw
-    inventory --> raw
-    metadata --> raw
+    subgraph context["Context Layer"]
+        direction TB
+        chroma["ChromaDB\nproduct similarity search"]
+        mcp["MCP server\n(optional — exposes same\nprofiles as standard tools)"]
+    end
 
-    raw --> flink
-    flink --> userTopic
-    flink --> productTopic
-    metadata -.-> chroma
+    subgraph agents["CrewAI Agents"]
+        direction TB
+        pa["Personalization Agent\nrecommends one product per user"]
+        ma["Merchandising Agent\nranks top 3 products to promote"]
+    end
 
-    userTopic --> mcp
-    productTopic --> mcp
-    userTopic --> personalization
-    productTopic --> personalization
-    productTopic --> merchandising
-    chroma --> personalization
-    mcp -. optional context access .-> personalization
-    mcp -. optional context access .-> merchandising
+    subgraph output["Output"]
+        rec[("recommendations\nKafka topic")]
+        mon["Prometheus · Grafana\n(pipeline metrics)"]
+    end
 
-    personalization --> recTopic
-    merchandising --> recTopic
+    cs --> t1
+    cu --> t2
+    inv --> t3
+    meta --> t4
 
-    raw -. metrics .-> monitoring
-    userTopic -. metrics .-> monitoring
-    productTopic -. metrics .-> monitoring
-    recTopic -. metrics .-> monitoring
+    t1 --> f1
+    t1 --> f2
+    t2 --> f2
+    t3 --> f3
+    t4 --> f3
+    t4 -.-> chroma
+
+    f1 --> up
+    f2 --> up
+    f3 --> pp
+
+    up --> mcp
+    pp --> mcp
+    up --> pa
+    pp --> pa
+    pp --> ma
+    chroma --> pa
+    mcp -. optional .-> pa
+    mcp -. optional .-> ma
+
+    pa --> rec
+    ma --> rec
+    profiles -.-> mon
+    rec -.-> mon
 ```
 
 The diagram is kept in the README as Mermaid so it renders directly on GitHub.
