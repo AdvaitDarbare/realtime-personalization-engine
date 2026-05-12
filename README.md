@@ -33,14 +33,14 @@ The diagram below is intentionally close to the reference picture, but scoped to
 
 ```mermaid
 flowchart LR
-    subgraph events["Events"]
-        cs["shoe-clickstream\n(search, view, add-to-cart)"]
-        cu["cart-updates\n(purchase, return)"]
-        inv["inventory\n(stock, price, sale)"]
-        meta["product-metadata\n(name, description, rating)"]
+    subgraph sources["Event Sources"]
+        cs["Clickstream Events"]
+        cu["Cart Events"]
+        inv["Inventory Events"]
+        meta["Product Metadata"]
     end
 
-    subgraph kafka["Kafka — raw topics"]
+    subgraph rawkafka["Kafka — Raw Topics"]
         direction TB
         t1[("shoe-clickstream")]
         t2[("cart-updates")]
@@ -48,34 +48,34 @@ flowchart LR
         t4[("product-metadata")]
     end
 
-    subgraph flink["Flink SQL — streaming features"]
+    subgraph flink["Flink SQL"]
         direction TB
-        f1["active interest category\nrecent searches · cart adds"]
-        f2["price sensitivity\navg order price · order history"]
-        f3["stock trend · demand score\nsale status · avg rating"]
+        fu["User Features\nactive category · price sensitivity"]
+        fp["Product Features\nstock trend · demand score"]
     end
 
-    subgraph profiles["Live Profiles — compacted Kafka topics"]
+    subgraph liveprofiles["Live Profiles"]
         direction TB
-        up[("live-user-profile")]
-        pp[("live-product-profile")]
+        up[("User Profile")]
+        pp[("Product Profile")]
     end
 
     subgraph context["Context Layer"]
         direction TB
-        chroma["ChromaDB\nproduct similarity search"]
-        mcp["MCP server\n(optional — exposes same\nprofiles as standard tools)"]
+        chroma["Product Similarity Search"]
+        mcp["MCP Server\n(optional)"]
     end
 
     subgraph agents["CrewAI Agents"]
         direction TB
-        pa["Personalization Agent\nrecommends one product per user"]
-        ma["Merchandising Agent\nranks top 3 products to promote"]
+        pa["Personalization Agent"]
+        ma["Merchandising Agent"]
     end
 
-    subgraph output["Output"]
-        rec[("recommendations\nKafka topic")]
-        mon["Prometheus · Grafana\n(pipeline metrics)"]
+    subgraph outmon["Output & Monitoring"]
+        direction TB
+        rec[("Recommendations Topic")]
+        mon["Prometheus / Grafana"]
     end
 
     cs --> t1
@@ -83,30 +83,38 @@ flowchart LR
     inv --> t3
     meta --> t4
 
-    t1 --> f1
-    t1 --> f2
-    t2 --> f2
-    t3 --> f3
-    t4 --> f3
+    t1 & t2 --> fu
+    t3 & t4 --> fp
     t4 -.-> chroma
 
-    f1 --> up
-    f2 --> up
-    f3 --> pp
+    fu --> up
+    fp --> pp
 
-    up --> mcp
-    pp --> mcp
-    up --> pa
-    pp --> pa
+    up & pp --> pa
     pp --> ma
     chroma --> pa
-    mcp -. optional .-> pa
-    mcp -. optional .-> ma
 
-    pa --> rec
-    ma --> rec
-    profiles -.-> mon
+    mcp -.-> pa
+    mcp -.-> ma
+
+    pa & ma --> rec
     rec -.-> mon
+
+    classDef topic    fill:#2f9e44,stroke:#2f9e44,color:#fff
+    classDef processor fill:#e8590c,stroke:#c94e16,color:#fff
+    classDef profile  fill:#1971c2,stroke:#1864ab,color:#fff
+    classDef agent    fill:#f8f9fa,stroke:#343a40,color:#212529
+    classDef recnode  fill:#e67700,stroke:#d16300,color:#fff
+    classDef metrics  fill:#f1f3f5,stroke:#adb5bd,color:#495057
+    classDef ctx      fill:#7048e8,stroke:#5f3dc4,color:#fff
+
+    class t1,t2,t3,t4 topic
+    class fu,fp processor
+    class up,pp profile
+    class pa,ma agent
+    class rec recnode
+    class mon metrics
+    class chroma,mcp ctx
 ```
 
 The diagram is kept in the README as Mermaid so it renders directly on GitHub.
