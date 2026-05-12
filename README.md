@@ -41,25 +41,15 @@ flowchart LR
         metadataProducer["Metadata Producer"]
     end
 
-    subgraph topics["Kafka Topics"]
+    subgraph profiles["Live Profiles"]
         direction TB
-        clickTopic[("shoe-clickstream")]
-        cartTopic[("cart-updates")]
-        inventoryTopic[("inventory")]
-        metadataTopic[("product-metadata")]
-        recTopic[("recommendations")]
-    end
-
-    subgraph processing["Processing"]
-        direction TB
-        flink["Flink SQL"]
-        chroma["ChromaDB"]
+        userProfile[("live-user-profile")]
+        productProfile[("live-product-profile")]
     end
 
     subgraph context["Live Context"]
         direction TB
-        userProfile[("live-user-profile")]
-        productProfile[("live-product-profile")]
+        chroma["ChromaDB"]
         mcp["MCP Server"]
     end
 
@@ -69,6 +59,12 @@ flowchart LR
         merchandising["Merchandising Agent"]
     end
 
+    clickTopic[("shoe-clickstream")]
+    cartTopic[("cart-updates")]
+    inventoryTopic[("inventory")]
+    metadataTopic[("product-metadata")]
+    flink["Flink SQL"]
+    recTopic[("recommendations")]
     monitoring["Prometheus / Grafana"]
 
     clickProducer --> clickTopic
@@ -84,6 +80,7 @@ flowchart LR
 
     flink --> userProfile
     flink --> productProfile
+
     userProfile --> mcp
     productProfile --> mcp
     chroma --> mcp
@@ -103,8 +100,8 @@ flowchart LR
 
     class clickProducer,cartProducer,inventoryProducer,metadataProducer producer
     class clickTopic,cartTopic,inventoryTopic,metadataTopic,recTopic kafka
-    class flink,chroma process
-    class userProfile,productProfile,mcp context
+    class flink process
+    class userProfile,productProfile,chroma,mcp context
     class personalization,merchandising agent
     class monitoring monitor
 ```
