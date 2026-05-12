@@ -2,7 +2,7 @@
 
 A small learning project that shows how Kafka, Flink, and CrewAI can work together in an end-to-end streaming data pipeline.
 
-The project simulates a shoe store. Python producers send live clickstream, cart, inventory, and product metadata events into Kafka. Flink SQL turns those raw events into live user and product profiles. A CrewAI agent reads that context, searches a small product index, applies simple price guardrails, and writes a recommendation back to Kafka.
+The project simulates a shoe store. Python producers send live clickstream, cart, inventory, and product metadata events into Kafka. Flink SQL turns those raw events into live user and product profiles. CrewAI agents read that context through MCP tools, search a small product index, apply simple price guardrails, and write recommendations back to Kafka.
 
 This is intentionally not a production platform. It is a practical demo for learning how a real-time AI context layer might work.
 
@@ -119,9 +119,9 @@ The diagram is kept in the README as Mermaid so it renders directly on GitHub.
 
 **ChromaDB** is a tiny local semantic product index. It reads product metadata from Kafka and lets the agent search for products using text like `budget everyday running shoe`.
 
-**CrewAI** is the AI layer. The personalization agent uses tools to read the live Kafka profiles, search similar products, filter by price sensitivity in code, and produce one recommendation.
+**MCP** is the context serving layer between live profiles and agents. `agents/mcp_server.py` exposes the live Kafka profiles and ChromaDB search through named tools (`get_live_user_profile`, `get_price_qualified_catalog`, `search_similar_products`, `get_live_product_catalog`). Agents call these tools through CrewAI's `MCPServerAdapter` and never touch Kafka or ChromaDB directly.
 
-**MCP** is an optional context bridge. `agents/mcp_server.py` exposes the same live context through simple MCP tools, so another agent or desktop client can ask for user/product context without knowing the Kafka topic names.
+**CrewAI** is the AI layer. The personalization agent calls MCP tools to read live user context, search similar products, and filter by price sensitivity, then produces one recommendation.
 
 ## Repository Structure
 
@@ -130,7 +130,7 @@ The diagram is kept in the README as Mermaid so it renders directly on GitHub.
 |-- agents/
 |   |-- main.py                  # Watches live user profiles and triggers recommendations
 |   |-- crew.py                  # CrewAI runner functions
-|   |-- mcp_server.py            # Optional MCP bridge over live context tools
+|   |-- mcp_server.py            # MCP server — primary context layer for agents
 |   |-- smoke_test.py            # Local health check script
 |   |-- config/agents.py         # OpenAI LLM and agent definitions
 |   |-- tasks/tasks.py           # CrewAI task prompts
@@ -140,7 +140,6 @@ The diagram is kept in the README as Mermaid so it renders directly on GitHub.
 |-- monitoring/kafka_exporter.py # Optional Grafana/Prometheus metrics exporter
 |-- producers/                   # Event generators
 |-- .env.example
-|-- medium_article_draft.md      # Beginner-friendly article draft
 |-- requirements.txt
 `-- README.md
 ```

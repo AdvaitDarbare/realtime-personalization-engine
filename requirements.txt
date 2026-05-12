@@ -1,5 +1,6 @@
 kafka-python>=2.0.2,<3.0.0
-crewai>=0.100.0,<1.0.0
+crewai>=1.0.0
+crewai-tools>=1.0.0
 chromadb>=0.5.0
 openai>=1.0.0
 prometheus-client>=0.20.0
