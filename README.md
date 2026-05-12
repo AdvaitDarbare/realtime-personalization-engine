@@ -359,13 +359,3 @@ Make sure Docker is running and Kafka is healthy:
 docker compose -f docker/docker-compose.yml ps
 docker logs kafka --tail 50
 ```
-
-## Why the Project Stays Small
-
-The important learning flow is:
-
-```text
-events -> Kafka -> Flink profiles -> CrewAI tools -> recommendation
-```
-
-Everything else is intentionally kept simple. There is no web app, no schema registry, and no Kafka Connect. Grafana is included only as a lightweight learning dashboard so you can see the live profile and recommendation counts.
