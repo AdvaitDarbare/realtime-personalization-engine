@@ -33,41 +33,80 @@ The diagram below is intentionally close to the reference picture, but scoped to
 
 ```mermaid
 flowchart LR
-    user["User Events"]
-    product["Product Events"]
-    kafkaRaw[("Kafka\nRaw Topics")]
-    flink["Flink"]
-    profiles["Live Profiles"]
-    mcp["MCP Context"]
-    chroma["ChromaDB"]
-    agents["Agents"]
-    kafkaRec[("Kafka\nRecommendations")]
-    grafana["Grafana"]
+    subgraph producers["Producers"]
+        direction TB
+        clickProducer["Clickstream Producer"]
+        cartProducer["Cart Producer"]
+        inventoryProducer["Inventory Producer"]
+        metadataProducer["Metadata Producer"]
+    end
 
-    user --> kafkaRaw
-    product --> kafkaRaw
-    kafkaRaw --> flink
-    flink --> profiles
-    profiles --> mcp
-    kafkaRaw --> chroma
+    subgraph topics["Kafka Topics"]
+        direction TB
+        clickTopic[("shoe-clickstream")]
+        cartTopic[("cart-updates")]
+        inventoryTopic[("inventory")]
+        metadataTopic[("product-metadata")]
+        recTopic[("recommendations")]
+    end
+
+    subgraph processing["Processing"]
+        direction TB
+        flink["Flink SQL"]
+        chroma["ChromaDB"]
+    end
+
+    subgraph context["Live Context"]
+        direction TB
+        userProfile[("live-user-profile")]
+        productProfile[("live-product-profile")]
+        mcp["MCP Server"]
+    end
+
+    subgraph agents["Agents"]
+        direction TB
+        personalization["Personalization Agent"]
+        merchandising["Merchandising Agent"]
+    end
+
+    monitoring["Prometheus / Grafana"]
+
+    clickProducer --> clickTopic
+    cartProducer --> cartTopic
+    inventoryProducer --> inventoryTopic
+    metadataProducer --> metadataTopic
+
+    clickTopic --> flink
+    cartTopic --> flink
+    inventoryTopic --> flink
+    metadataTopic --> flink
+    metadataTopic --> chroma
+
+    flink --> userProfile
+    flink --> productProfile
+    userProfile --> mcp
+    productProfile --> mcp
     chroma --> mcp
-    mcp --> agents
-    agents --> kafkaRec
-    kafkaRec --> grafana
 
-    classDef source fill:#f8f9fa,stroke:#495057,color:#212529
+    mcp --> personalization
+    mcp --> merchandising
+    personalization --> recTopic
+    merchandising --> recTopic
+    recTopic --> monitoring
+
+    classDef producer fill:#f8f9fa,stroke:#495057,color:#212529
     classDef kafka fill:#2f9e44,stroke:#2f9e44,color:#fff
     classDef process fill:#e8590c,stroke:#c94e16,color:#fff
     classDef context fill:#1971c2,stroke:#1864ab,color:#fff
     classDef agent fill:#7048e8,stroke:#5f3dc4,color:#fff
     classDef monitor fill:#f1f3f5,stroke:#868e96,color:#343a40
 
-    class user,product source
-    class kafkaRaw,kafkaRec kafka
-    class flink process
-    class profiles,mcp,chroma context
-    class agents agent
-    class grafana monitor
+    class clickProducer,cartProducer,inventoryProducer,metadataProducer producer
+    class clickTopic,cartTopic,inventoryTopic,metadataTopic,recTopic kafka
+    class flink,chroma process
+    class userProfile,productProfile,mcp context
+    class personalization,merchandising agent
+    class monitoring monitor
 ```
 
 The diagram is kept in the README as Mermaid so it renders directly on GitHub.
